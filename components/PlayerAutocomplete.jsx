@@ -7,12 +7,14 @@ import { getFlagUrl } from "@/lib/countryFlags";
 const RESULT_LIMIT = 8;
 
 // pesdb.net lists the same real player multiple times across team/card
-// snapshots (same name, different id) — keep only the highest-rated entry
-// per name so search doesn't show duplicates.
-function dedupeByName(rows) {
+// snapshots (same name, same nationality, different id) — keep only the
+// highest-rated entry per name+nationality. Two different real players can
+// share a name (e.g. two "David Silva"s, one Colombian one Brazilian), so
+// nationality has to be part of the key or one of them gets dropped.
+function dedupeByNameAndNationality(rows) {
   const seen = new Map();
   for (const row of rows) {
-    const key = row.name.toLowerCase();
+    const key = `${row.name.toLowerCase()}|${row.nationality || ""}`;
     if (!seen.has(key)) seen.set(key, row);
   }
   return [...seen.values()];
@@ -39,7 +41,7 @@ export default function PlayerAutocomplete({ value, onChange, className }) {
         .ilike("name", `%${term}%`)
         .order("rating", { ascending: false })
         .limit(RESULT_LIMIT * 5);
-      setResults(dedupeByName(data || []).slice(0, RESULT_LIMIT));
+      setResults(dedupeByNameAndNationality(data || []).slice(0, RESULT_LIMIT));
     }, 250);
 
     return () => clearTimeout(timeout);
