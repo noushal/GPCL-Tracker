@@ -24,7 +24,10 @@ export default function LiveClock() {
     .pop();
 
   return (
-    <div className="flex items-baseline gap-3 md:pl-4 md:border-l md:border-neutral-700/80" title={timeZone}>
+    <div
+      className="flex flex-col sm:flex-row sm:items-baseline gap-0.5 sm:gap-3 md:pl-4 md:border-l md:border-neutral-700/80"
+      title={timeZone}
+    >
       <span className="font-mono text-2xl leading-none text-neutral-100 tabular-nums">
         {hh}
         <span className="clock-colon">:</span>

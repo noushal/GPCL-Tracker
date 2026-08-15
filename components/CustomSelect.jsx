@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 export default function CustomSelect({
   value,
@@ -8,13 +8,23 @@ export default function CustomSelect({
   options,
   className = "",
   buttonClassName = "px-3 py-2 text-sm",
+  searchable = false,
+  searchPlaceholder = "Search...",
 }) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
+  const [query, setQuery] = useState("");
   const boxRef = useRef(null);
+  const searchRef = useRef(null);
 
   const selected = options.find((o) => o.value === value) ?? options[0];
   const isPlaceholder = selected?.value === "";
+
+  const visibleOptions = useMemo(() => {
+    if (!searchable || !query.trim()) return options;
+    const term = query.trim().toLowerCase();
+    return options.filter((o) => !o.disabled && o.label.toLowerCase().includes(term));
+  }, [options, searchable, query]);
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -25,8 +35,16 @@ export default function CustomSelect({
   }, []);
 
   useEffect(() => {
-    if (open) setHighlight(options.findIndex((o) => o.value === value));
-  }, [open, options, value]);
+    if (open) {
+      setQuery("");
+      setHighlight(options.findIndex((o) => o.value === value));
+      if (searchable) setTimeout(() => searchRef.current?.focus(), 0);
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (open) setHighlight(0);
+  }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleKeyDown(e) {
     if (e.key === "Escape") {
@@ -36,8 +54,8 @@ export default function CustomSelect({
     if (e.key === "Enter") {
       e.preventDefault();
       if (open) {
-        if (!options[highlight]?.disabled) {
-          onChange(options[highlight].value);
+        if (visibleOptions[highlight] && !visibleOptions[highlight].disabled) {
+          onChange(visibleOptions[highlight].value);
           setOpen(false);
         }
       } else {
@@ -51,8 +69,8 @@ export default function CustomSelect({
         setOpen(true);
       } else {
         setHighlight((h) => {
-          for (let next = h + 1; next < options.length; next++) {
-            if (!options[next].disabled) return next;
+          for (let next = h + 1; next < visibleOptions.length; next++) {
+            if (!visibleOptions[next].disabled) return next;
           }
           return h;
         });
@@ -63,7 +81,7 @@ export default function CustomSelect({
       if (open) {
         setHighlight((h) => {
           for (let next = h - 1; next >= 0; next--) {
-            if (!options[next].disabled) return next;
+            if (!visibleOptions[next].disabled) return next;
           }
           return h;
         });
@@ -90,41 +108,59 @@ export default function CustomSelect({
       </button>
 
       {open && (
-        <div className="absolute z-20 mt-1 w-full min-w-max bg-neutral-900 border border-neutral-600 rounded-lg shadow-xl shadow-black/40 py-1 max-h-64 overflow-y-auto custom-scrollbar">
-          {options.map((option, i) => {
-            const isSelected = option.value === value;
-            if (option.disabled) {
+        <div className="absolute z-20 mt-1 w-full bg-neutral-900 border border-neutral-600 rounded-lg shadow-xl shadow-black/40 max-h-72 flex flex-col">
+          {searchable && (
+            <div className="p-2 border-b border-neutral-700 shrink-0">
+              <input
+                ref={searchRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={searchPlaceholder}
+                className="w-full bg-neutral-800 border border-neutral-600 rounded-md px-2.5 py-1.5 text-sm text-white placeholder:text-neutral-500 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          )}
+
+          <div className="overflow-y-auto custom-scrollbar py-1">
+            {visibleOptions.length === 0 && (
+              <div className="px-3 py-2 text-sm text-neutral-500 italic">No matches.</div>
+            )}
+            {visibleOptions.map((option, i) => {
+              const isSelected = option.value === value;
+              if (option.disabled) {
+                return (
+                  <div
+                    key={option.value}
+                    className="w-full px-3 py-2 text-sm text-neutral-600 italic cursor-default select-none"
+                  >
+                    {option.label}
+                  </div>
+                );
+              }
               return (
-                <div
+                <button
+                  type="button"
                   key={option.value}
-                  className="w-full px-3 py-2 text-sm text-neutral-600 italic cursor-default select-none"
+                  onClick={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                  onMouseEnter={() => setHighlight(i)}
+                  className={`w-full flex items-center justify-between gap-2 text-left px-3 py-2 text-sm transition-colors ${
+                    i === highlight ? "bg-neutral-700/60" : ""
+                  } ${isSelected ? "text-blue-400" : "text-neutral-200"}`}
                 >
-                  {option.label}
-                </div>
+                  <span className="truncate">{option.label}</span>
+                  {isSelected && (
+                    <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                  )}
+                </button>
               );
-            }
-            return (
-              <button
-                type="button"
-                key={option.value}
-                onClick={() => {
-                  onChange(option.value);
-                  setOpen(false);
-                }}
-                onMouseEnter={() => setHighlight(i)}
-                className={`w-full flex items-center justify-between gap-2 text-left px-3 py-2 text-sm transition-colors ${
-                  i === highlight ? "bg-neutral-700/60" : ""
-                } ${isSelected ? "text-blue-400" : "text-neutral-200"}`}
-              >
-                <span className="truncate">{option.label}</span>
-                {isSelected && (
-                  <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
-              </button>
-            );
-          })}
+            })}
+          </div>
         </div>
       )}
     </div>

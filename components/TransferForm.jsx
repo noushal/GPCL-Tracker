@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import PlayerAutocomplete from "@/components/PlayerAutocomplete";
 import CustomSelect from "@/components/CustomSelect";
 import CustomDatePicker from "@/components/CustomDatePicker";
@@ -13,6 +14,7 @@ const WINDOW_OPTIONS = WINDOWS.map((w) => ({ value: w, label: w }));
 const emptyForm = {
   team: "",
   player: "",
+  playerId: null,
   fee: "",
   season: "Season 2",
   window: WINDOWS[0],
@@ -28,6 +30,7 @@ export default function TransferForm({ teams, editingLog, onSubmit, onCancelEdit
       setForm({
         team: editingLog.team || "",
         player: editingLog.player || "",
+        playerId: editingLog.player_id ?? null,
         fee: editingLog.fee || "",
         season: editingLog.season || "Season 2",
         window: editingLog.transfer_window || WINDOWS[0],
@@ -64,8 +67,27 @@ export default function TransferForm({ teams, editingLog, onSubmit, onCancelEdit
 
   if (!canEdit) {
     return (
-      <div className="lg:col-span-1 bg-neutral-800 rounded-2xl shadow-lg border border-neutral-700 p-6 h-fit text-sm text-neutral-400">
-        Sign in to log transfers.
+      <div className="lg:col-span-1 bg-neutral-800 rounded-2xl shadow-lg border border-neutral-700 p-6 md:p-8 h-fit flex flex-col items-center text-center gap-3">
+        <div className="w-11 h-11 rounded-full bg-neutral-900 border border-neutral-700 flex items-center justify-center">
+          <svg className="w-5 h-5 text-neutral-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="2"
+              d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+            />
+          </svg>
+        </div>
+        <div>
+          <p className="text-sm font-medium text-neutral-300">Sign in to log transfers</p>
+          <p className="text-xs text-neutral-500 mt-1">Viewing is open to everyone — editing needs an account.</p>
+        </div>
+        <Link
+          href="/login"
+          className="text-sm bg-neutral-900 hover:bg-neutral-700 border border-neutral-700 text-neutral-300 px-4 py-2 rounded-lg transition-colors"
+        >
+          Sign in
+        </Link>
       </div>
     );
   }
@@ -87,6 +109,8 @@ export default function TransferForm({ teams, editingLog, onSubmit, onCancelEdit
             onChange={(v) => set("team", v)}
             options={teamOptions}
             buttonClassName="px-4 py-2.5"
+            searchable
+            searchPlaceholder="Search teams..."
           />
         </div>
 
@@ -94,7 +118,8 @@ export default function TransferForm({ teams, editingLog, onSubmit, onCancelEdit
           <label className="block text-sm font-medium text-neutral-400 mb-1">Player Name</label>
           <PlayerAutocomplete
             value={form.player}
-            onChange={(v) => set("player", v)}
+            onChange={(v) => setForm((f) => ({ ...f, player: v, playerId: null }))}
+            onSelectPlayer={(p) => setForm((f) => ({ ...f, player: p.name, playerId: p.id }))}
             className="w-full bg-neutral-900 border border-neutral-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
           />
         </div>

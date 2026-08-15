@@ -1,5 +1,6 @@
 import { Inter } from "next/font/google";
 import "./globals.css";
+import UsernameGate from "@/components/UsernameGate";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -19,6 +20,7 @@ export default function RootLayout({ children }) {
         suppressHydrationWarning
       >
         {children}
+        <UsernameGate />
       </body>
     </html>
   );

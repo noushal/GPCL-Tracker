@@ -130,7 +130,7 @@ export default function CustomDatePicker({ value, onChange, className }) {
       </button>
 
       {open && (
-        <div className="absolute z-20 mt-1 w-72 bg-neutral-900 border border-neutral-600 rounded-lg shadow-xl shadow-black/40 p-3">
+        <div className="absolute z-20 mt-1 w-72 max-w-[calc(100vw-2rem)] bg-neutral-900 border border-neutral-600 rounded-lg shadow-xl shadow-black/40 p-3">
           <div className="flex items-center justify-between mb-2">
             <button
               type="button"

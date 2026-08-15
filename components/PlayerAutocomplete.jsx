@@ -20,7 +20,7 @@ function dedupeByNameAndNationality(rows) {
   return [...seen.values()];
 }
 
-export default function PlayerAutocomplete({ value, onChange, className }) {
+export default function PlayerAutocomplete({ value, onChange, onSelectPlayer, className }) {
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
   const boxRef = useRef(null);
@@ -79,6 +79,7 @@ export default function PlayerAutocomplete({ value, onChange, className }) {
                 key={p.id}
                 onClick={() => {
                   onChange(p.name);
+                  onSelectPlayer?.(p);
                   setOpen(false);
                 }}
                 className="w-full text-left px-4 py-2 hover:bg-neutral-700 transition-colors flex justify-between items-center gap-3"

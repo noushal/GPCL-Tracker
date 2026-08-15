@@ -16,6 +16,14 @@
   background: #737373;
 }
 
+.scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
+
 .clock-colon {
   animation: clock-blink 1s steps(1) infinite;
 }
