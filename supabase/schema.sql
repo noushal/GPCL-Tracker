@@ -87,7 +87,7 @@ begin
 
   if TG_TABLE_NAME = 'transfer_logs' then
     if TG_OP = 'INSERT' then
-      summary := format('Logged transfer: %s to %s (€%s)', NEW.player, NEW.team, NEW.fee);
+      summary := format('Logged transfer: %s to %s (£%s)', NEW.player, NEW.team, NEW.fee);
     elsif TG_OP = 'UPDATE' then
       summary := format('Updated transfer: %s (%s)', NEW.player, NEW.team);
     elsif TG_OP = 'DELETE' then

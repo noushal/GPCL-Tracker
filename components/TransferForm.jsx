@@ -125,7 +125,7 @@ export default function TransferForm({ teams, editingLog, onSubmit, onCancelEdit
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-neutral-400 mb-1">Transfer Fee (€)</label>
+          <label className="block text-sm font-medium text-neutral-400 mb-1">Transfer Fee (£)</label>
           <input
             type="number"
             step="0.01"
