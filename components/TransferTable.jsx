@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatCurrency } from "@/lib/utils";
 import { getFlagUrl } from "@/lib/countryFlags";
 import CustomSelect from "@/components/CustomSelect";
+
+const PAGE_SIZE = 7;
 
 const SORT_OPTIONS = [
   { value: "newest", label: "Newest First" },
@@ -96,10 +98,100 @@ function RowActions({ log, onEdit, onDelete }) {
   );
 }
 
+// ─── Pagination bar ──────────────────────────────────────────────────────────
+function Pagination({ currentPage, totalPages, onPageChange }) {
+  if (totalPages <= 1) return null;
+
+  // Show at most 5 page numbers, centred around the current page
+  const pageNums = useMemo(() => {
+    const delta = 2;
+    const start = Math.max(1, currentPage - delta);
+    const end = Math.min(totalPages, currentPage + delta);
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  }, [currentPage, totalPages]);
+
+  return (
+    <div className="flex items-center justify-center gap-1 px-4 py-3 border-t border-neutral-700 flex-wrap">
+      {/* Previous */}
+      <button
+        onClick={() => onPageChange(currentPage - 1)}
+        disabled={currentPage === 1}
+        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-neutral-400 hover:text-white hover:bg-neutral-700/60"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" />
+        </svg>
+        Prev
+      </button>
+
+      {/* Leading ellipsis */}
+      {pageNums[0] > 1 && (
+        <>
+          <button onClick={() => onPageChange(1)} className="w-8 h-8 rounded-lg text-sm text-neutral-400 hover:bg-neutral-700/60 hover:text-white transition-colors">
+            1
+          </button>
+          {pageNums[0] > 2 && <span className="text-neutral-600 px-1">…</span>}
+        </>
+      )}
+
+      {pageNums.map((n) => (
+        <button
+          key={n}
+          onClick={() => onPageChange(n)}
+          className={`w-8 h-8 rounded-lg text-sm font-medium transition-colors ${
+            n === currentPage
+              ? "bg-blue-600 text-white shadow-md shadow-blue-900/40"
+              : "text-neutral-400 hover:bg-neutral-700/60 hover:text-white"
+          }`}
+        >
+          {n}
+        </button>
+      ))}
+
+      {/* Trailing ellipsis */}
+      {pageNums[pageNums.length - 1] < totalPages && (
+        <>
+          {pageNums[pageNums.length - 1] < totalPages - 1 && <span className="text-neutral-600 px-1">…</span>}
+          <button onClick={() => onPageChange(totalPages)} className="w-8 h-8 rounded-lg text-sm text-neutral-400 hover:bg-neutral-700/60 hover:text-white transition-colors">
+            {totalPages}
+          </button>
+        </>
+      )}
+
+      {/* Next */}
+      <button
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={currentPage === totalPages}
+        className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-neutral-400 hover:text-white hover:bg-neutral-700/60"
+      >
+        Next
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }) {
   const [search, setSearch] = useState("");
   const [teamFilter, setTeamFilter] = useState("All");
   const [sortMode, setSortMode] = useState("newest");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [isFullTeamView, setIsFullTeamView] = useState(false);
+
+  const isTeamSelected = teamFilter !== "All";
+
+  // Reset page to 1 whenever filters, sort, or view-mode changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, teamFilter, sortMode, isFullTeamView]);
+
+  // Also turn off Full Team View if the user switches back to "All Teams"
+  useEffect(() => {
+    if (!isTeamSelected) setIsFullTeamView(false);
+  }, [isTeamSelected]);
 
   const processedLogs = useMemo(() => {
     const term = search.toLowerCase();
@@ -109,16 +201,20 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
       return matchesSearch && matchesTeam;
     });
 
-    const sorted = [...filtered].sort((a, b) => {
+    return [...filtered].sort((a, b) => {
       if (sortMode === "newest") return new Date(b.created_at) - new Date(a.created_at);
       if (sortMode === "oldest") return new Date(a.created_at) - new Date(b.created_at);
       if (sortMode === "az") return a.player.localeCompare(b.player);
       if (sortMode === "za") return b.player.localeCompare(a.player);
       return 0;
     });
-
-    return sorted;
   }, [logs, search, teamFilter, sortMode]);
+
+  // Pagination slicing — bypassed entirely in Full Team View
+  const totalPages = isFullTeamView ? 1 : Math.ceil(processedLogs.length / PAGE_SIZE);
+  const visibleLogs = isFullTeamView
+    ? processedLogs
+    : processedLogs.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const teamOptions = useMemo(
     () => [{ value: "All", label: "All Teams" }, ...teams.map((t) => ({ value: t.name, label: t.name }))],
@@ -127,7 +223,8 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
 
   return (
     <div className="lg:col-span-3 bg-neutral-800 rounded-2xl shadow-lg border border-neutral-700 overflow-hidden flex flex-col">
-      <div className="p-4 sm:p-6 border-b border-neutral-700 flex flex-wrap items-center justify-between gap-2">
+      {/* ── Header ── */}
+      <div className="p-4 sm:p-6 border-b border-neutral-700 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2">
           <svg className="w-5 h-5 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path
@@ -139,21 +236,40 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
           </svg>
           Active Transfer Lock
         </h2>
-        <span className="bg-neutral-900 text-neutral-400 text-xs px-3 py-1 rounded-full border border-neutral-700">
-          {processedLogs.length} {processedLogs.length === 1 ? "Record" : "Records"}
-        </span>
+
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Full Team View toggle — only shown when a specific team is filtered */}
+          {isTeamSelected && (
+            <button
+              onClick={() => setIsFullTeamView((v) => !v)}
+              title={isFullTeamView ? "Switch back to paginated view" : `Show all records for ${teamFilter}`}
+              className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg border transition-colors ${
+                isFullTeamView
+                  ? "bg-purple-600/20 border-purple-500/50 text-purple-300 hover:bg-purple-600/30"
+                  : "bg-neutral-900/60 border-neutral-600 text-neutral-400 hover:border-purple-500/50 hover:text-purple-300"
+              }`}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+              </svg>
+              {isFullTeamView ? "Paginated View" : "Full Team View"}
+            </button>
+          )}
+
+          <span className="bg-neutral-900 text-neutral-400 text-xs px-3 py-1 rounded-full border border-neutral-700">
+            {isFullTeamView
+              ? `${processedLogs.length} ${processedLogs.length === 1 ? "Record" : "Records"} — Full View`
+              : `${processedLogs.length} ${processedLogs.length === 1 ? "Record" : "Records"}`}
+          </span>
+        </div>
       </div>
 
+      {/* ── Filter bar ── */}
       <div className="bg-neutral-900/40 p-4 border-b border-neutral-700 flex flex-col sm:flex-row gap-4 items-center justify-between text-sm">
         <div className="w-full sm:w-1/3 relative">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <svg className="h-4 w-4 text-neutral-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </div>
           <input
@@ -178,13 +294,13 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
         </div>
       </div>
 
-      {/* Mobile: stacked cards — a horizontally-scrolling table hides most columns off-screen with no hint they're there */}
+      {/* ── Mobile: stacked cards ── */}
       <div className="md:hidden flex-1">
-        {processedLogs.length === 0 ? (
+        {visibleLogs.length === 0 ? (
           <EmptyState />
         ) : (
           <div className="divide-y divide-neutral-700/50">
-            {processedLogs.map((log) => (
+            {visibleLogs.map((log) => (
               <div key={log.id} className="p-4 space-y-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
@@ -230,7 +346,7 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
         )}
       </div>
 
-      {/* Tablet/desktop: full table */}
+      {/* ── Tablet/desktop: full table ── */}
       <div className="hidden md:block overflow-x-auto flex-1 scrollbar-hidden">
         <table className="w-full text-left text-sm whitespace-nowrap">
           <thead className="bg-neutral-900/50 text-neutral-400 border-b border-neutral-700 uppercase tracking-wider text-xs">
@@ -244,14 +360,14 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-700/50">
-            {processedLogs.length === 0 && (
+            {visibleLogs.length === 0 && (
               <tr>
                 <td colSpan={6}>
                   <EmptyState />
                 </td>
               </tr>
             )}
-            {processedLogs.map((log) => (
+            {visibleLogs.map((log) => (
               <tr key={log.id} className="hover:bg-neutral-700/30 transition-colors">
                 <td className="px-6 py-4 font-medium text-white">
                   <PlayerName log={log} />
@@ -281,6 +397,23 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
           </tbody>
         </table>
       </div>
+
+      {/* ── Pagination (hidden in Full Team View) ── */}
+      {!isFullTeamView && (
+        <Pagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
+      )}
+
+      {/* ── Full Team View footer note ── */}
+      {isFullTeamView && processedLogs.length > 0 && (
+        <div className="px-4 py-3 border-t border-neutral-700 text-xs text-center text-neutral-500">
+          Showing all <span className="text-purple-400 font-semibold">{processedLogs.length}</span> records for{" "}
+          <span className="text-purple-400 font-semibold">{teamFilter}</span>
+        </div>
+      )}
     </div>
   );
 }
