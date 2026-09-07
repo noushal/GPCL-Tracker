@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 export default function TeamManager({ teams, editingTeam, onSubmit, onCancelEdit, onDelete, onEdit, canEdit }) {
   const [name, setName] = useState("");
+  const [teamSearch, setTeamSearch] = useState("");
 
   useEffect(() => {
     setName(editingTeam ? editingTeam.name : "");
@@ -66,43 +67,71 @@ export default function TeamManager({ teams, editingTeam, onSubmit, onCancelEdit
       </div>
 
       <div className="bg-neutral-800 rounded-2xl shadow-lg border border-neutral-700 p-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <h3 className="text-sm font-medium text-neutral-400 uppercase tracking-wider">Active Teams</h3>
-          <span className="bg-neutral-900 text-neutral-400 text-xs px-3 py-1 rounded-full border border-neutral-700">
-            {teams.length} {teams.length === 1 ? "Team" : "Teams"}
-          </span>
+
+          <div className="flex items-center gap-3">
+            {/* Search input */}
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg className="h-3.5 w-3.5 text-neutral-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                placeholder="Search teams..."
+                value={teamSearch}
+                onChange={(e) => setTeamSearch(e.target.value)}
+                className="bg-neutral-900 border border-neutral-600 rounded-lg pl-9 pr-3 py-1.5 text-sm text-white focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 w-44"
+              />
+            </div>
+
+            <span className="bg-neutral-900 text-neutral-400 text-xs px-3 py-1 rounded-full border border-neutral-700 shrink-0">
+              {teamSearch
+                ? `${teams.filter((t) => t.name.toLowerCase().includes(teamSearch.toLowerCase())).length} / ${teams.length}`
+                : `${teams.length} ${teams.length === 1 ? "Team" : "Teams"}`}
+            </span>
+          </div>
         </div>
 
         {teams.length === 0 ? (
           <p className="text-neutral-500 text-sm italic">No teams added yet.</p>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            {teams.map((team) => (
-              <div
-                key={team.id}
-                className="flex justify-between items-center gap-2 bg-neutral-900 border border-neutral-700 p-3 rounded-lg"
-              >
-                <span className="text-sm text-white truncate">{team.name}</span>
-                {canEdit && (
-                  <div className="flex gap-2 shrink-0">
-                    <button
-                      onClick={() => onEdit(team)}
-                      className="text-neutral-400 hover:text-purple-400 transition-colors text-xs border border-neutral-700 hover:border-purple-400 px-2 py-1 rounded"
-                    >
-                      EDIT
-                    </button>
-                    <button
-                      onClick={() => onDelete(team)}
-                      className="text-neutral-500 hover:text-red-400 transition-colors text-xs border border-neutral-700 hover:border-red-400 px-2 py-1 rounded"
-                    >
-                      REMOVE
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+        ) : (() => {
+          const filtered = teams.filter((t) =>
+            t.name.toLowerCase().includes(teamSearch.toLowerCase())
+          );
+          return filtered.length === 0 ? (
+            <p className="text-neutral-500 text-sm italic">No teams match &ldquo;{teamSearch}&rdquo;.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+              {filtered.map((team) => (
+                <div
+                  key={team.id}
+                  className="flex justify-between items-center gap-2 bg-neutral-900 border border-neutral-700 p-3 rounded-lg"
+                >
+                  <span className="text-sm text-white truncate">{team.name}</span>
+                  {canEdit && (
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        onClick={() => onEdit(team)}
+                        className="text-neutral-400 hover:text-purple-400 transition-colors text-xs border border-neutral-700 hover:border-purple-400 px-2 py-1 rounded"
+                      >
+                        EDIT
+                      </button>
+                      <button
+                        onClick={() => onDelete(team)}
+                        className="text-neutral-500 hover:text-red-400 transition-colors text-xs border border-neutral-700 hover:border-red-400 px-2 py-1 rounded"
+                      >
+                        REMOVE
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
