@@ -21,6 +21,9 @@ const emptyForm = {
   date: "",
 };
 
+// Fields cleared after each successful submission (team is intentionally excluded)
+const RESET_FIELDS = { player: "", playerId: null, fee: "", date: "" };
+
 export default function TransferForm({ teams, editingLog, onSubmit, onCancelEdit, canEdit }) {
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState("");
@@ -37,7 +40,9 @@ export default function TransferForm({ teams, editingLog, onSubmit, onCancelEdit
         date: editingLog.purchase_date || "",
       });
     } else {
-      setForm(emptyForm);
+      // When leaving edit mode, only reset the player-detail fields so the
+      // previously selected team is preserved for the next new-purchase log.
+      setForm((f) => ({ ...emptyForm, team: f.team, season: f.season, window: f.window }));
     }
   }, [editingLog]);
 
@@ -62,7 +67,9 @@ export default function TransferForm({ teams, editingLog, onSubmit, onCancelEdit
     }
     setError("");
     await onSubmit(form);
-    setForm(emptyForm);
+    // Selective reset: keep team, season, and window so the editor doesn't
+    // have to re-select them when logging multiple transfers for the same club.
+    setForm((f) => ({ ...f, ...RESET_FIELDS }));
   }
 
   if (!canEdit) {
