@@ -120,7 +120,7 @@ export default function TransferForm({ teams, editingLog, onSubmit, onCancelEdit
         {editingLog ? "Edit Transfer" : "Log New Purchase"}
       </h2>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} noValidate className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-neutral-400 mb-1">Buying Team</label>
           <CustomSelect
