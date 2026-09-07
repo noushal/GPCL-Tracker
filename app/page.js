@@ -60,9 +60,20 @@ export default function Home() {
     setTimeout(() => setError(""), 4000);
   }
 
+  const MIN_FEE = 1_000_000;
+
   async function handleSubmitLog(form) {
     const supabase = createClient();
     if (!supabase) return;
+
+    // Server-side guard — mirrors client validation; rejects below-minimum fees
+    // even if the client-side check is bypassed.
+    const feeValue = form.fee === "" ? 0 : Number(form.fee);
+    if (feeValue < MIN_FEE) {
+      showError("Transfer fee must be at least £1,000,000.");
+      return;
+    }
+
     const payload = {
       team: form.team,
       player: form.player.trim(),
