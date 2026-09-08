@@ -10,6 +10,10 @@ const inter = Inter({
 export const metadata = {
   title: "GPCL Transfer Tracker",
   description: "GPCL transfer window tracker and lock calculator",
+  icons: {
+    icon: "/gpcl-logo.png",
+    apple: "/gpcl-logo.png",
+  },
 };
 
 export default function RootLayout({ children }) {
