@@ -166,6 +166,8 @@
 									<option value="oldest">Oldest First</option>
 									<option value="az">Player (A-Z)</option>
 									<option value="za">Player (Z-A)</option>
+									<option value="fee-desc">Fee (High to Low)</option>
+									<option value="fee-asc">Fee (Low to High)</option>
 								</select>
 							</div>
 						</div>
@@ -323,6 +325,14 @@
 			if (sortMode === 'oldest') return parseInt(a.id) - parseInt(b.id);
 			if (sortMode === 'az') return a.player.localeCompare(b.player);
 			if (sortMode === 'za') return b.player.localeCompare(a.player);
+			if (sortMode === 'fee-desc') {
+				const diff = (Number(b.fee) || 0) - (Number(a.fee) || 0);
+				return diff !== 0 ? diff : parseInt(b.id) - parseInt(a.id);
+			}
+			if (sortMode === 'fee-asc') {
+				const diff = (Number(a.fee) || 0) - (Number(b.fee) || 0);
+				return diff !== 0 ? diff : parseInt(b.id) - parseInt(a.id);
+			}
 			return 0;
 			});
 
@@ -388,6 +398,47 @@
 			searchInput.addEventListener('input', renderLogs);
 			filterTeamSelect.addEventListener('change', renderLogs);
 			sortSelect.addEventListener('change', renderLogs);
+
+			const playerNameInput = document.getElementById('playerName');
+			if (playerNameInput) {
+				playerNameInput.addEventListener('keydown', (e) => {
+					if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key >= '0' && e.key <= '9') {
+						e.preventDefault();
+					}
+				});
+				playerNameInput.addEventListener('paste', (e) => {
+					e.preventDefault();
+					const raw = (e.clipboardData || window.clipboardData).getData('text');
+					const clean = raw.replace(/[0-9]/g, '');
+					if (!clean) return;
+					const start = playerNameInput.selectionStart || 0;
+					const end = playerNameInput.selectionEnd || 0;
+					playerNameInput.value = playerNameInput.value.slice(0, start) + clean + playerNameInput.value.slice(end);
+					playerNameInput.selectionStart = playerNameInput.selectionEnd = start + clean.length;
+				});
+				playerNameInput.addEventListener('input', () => {
+					playerNameInput.value = playerNameInput.value.replace(/[0-9]/g, '');
+				});
+			}
+
+			const transferFeeInput = document.getElementById('transferFee');
+			if (transferFeeInput) {
+				transferFeeInput.addEventListener('keydown', (e) => {
+					if (['e', 'E', '+', '-'].includes(e.key)) {
+						e.preventDefault();
+					}
+				});
+				transferFeeInput.addEventListener('paste', (e) => {
+					e.preventDefault();
+					const raw = (e.clipboardData || window.clipboardData).getData('text');
+					const clean = raw.replace(/[^0-9]/g, '');
+					if (!clean) return;
+					transferFeeInput.value = clean;
+				});
+				transferFeeInput.addEventListener('input', () => {
+					transferFeeInput.value = transferFeeInput.value.replace(/[^0-9]/g, '');
+				});
+			}
 
 			window.deleteTeam = function(id) {
 			teams = teams.filter(t => t.id !== id);

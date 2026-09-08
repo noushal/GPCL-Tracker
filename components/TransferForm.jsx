@@ -134,7 +134,7 @@ export default function TransferForm({ teams, editingLog, onSubmit, onCancelEdit
           <label className="block text-sm font-medium text-neutral-400 mb-1">Player Name</label>
           <PlayerAutocomplete
             value={form.player}
-            onChange={(v) => setForm((f) => ({ ...f, player: v, playerId: null }))}
+            onChange={(v) => setForm((f) => ({ ...f, player: typeof v === "string" ? v.replace(/[0-9]/g, "") : v, playerId: null }))}
             onSelectPlayer={(p) => setForm((f) => ({ ...f, player: p.name, playerId: p.id }))}
             className="w-full bg-neutral-900 border border-neutral-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
           />
@@ -148,16 +148,23 @@ export default function TransferForm({ teams, editingLog, onSubmit, onCancelEdit
             min="1000000"
             placeholder="e.g. 55000000"
             value={form.fee}
+            onKeyDown={(e) => {
+              if (["e", "E", "+", "-"].includes(e.key)) {
+                e.preventDefault();
+              }
+            }}
             onChange={(e) => {
-              set("fee", e.target.value);
+              const sanitized = e.target.value.replace(/[^0-9]/g, "");
+              set("fee", sanitized);
               // Clear inline error as soon as the user starts correcting
               if (feeError) setFeeError("");
             }}
             onPaste={(e) => {
               e.preventDefault();
               const raw = e.clipboardData.getData("text");
-              // Strip commas and periods (e.g. "40,000,000" or "40.000.000" → "40000000")
-              const sanitized = raw.replace(/[,.]/g, "");
+              // Disallow words, letters, and non-digits — strip everything except 0-9
+              const sanitized = raw.replace(/[^0-9]/g, "");
+              if (!sanitized) return;
               set("fee", sanitized);
               if (feeError) setFeeError("");
             }}

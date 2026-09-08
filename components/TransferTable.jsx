@@ -12,6 +12,8 @@ const SORT_OPTIONS = [
   { value: "oldest", label: "Oldest First" },
   { value: "az", label: "Player (A-Z)" },
   { value: "za", label: "Player (Z-A)" },
+  { value: "fee-desc", label: "Fee (High to Low)" },
+  { value: "fee-asc", label: "Fee (Low to High)" },
 ];
 
 function EmptyState() {
@@ -218,6 +220,14 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
       if (sortMode === "oldest") return new Date(a.created_at) - new Date(b.created_at);
       if (sortMode === "az") return a.player.localeCompare(b.player);
       if (sortMode === "za") return b.player.localeCompare(a.player);
+      if (sortMode === "fee-desc") {
+        const diff = (Number(b.fee) || 0) - (Number(a.fee) || 0);
+        return diff !== 0 ? diff : new Date(b.created_at) - new Date(a.created_at);
+      }
+      if (sortMode === "fee-asc") {
+        const diff = (Number(a.fee) || 0) - (Number(b.fee) || 0);
+        return diff !== 0 ? diff : new Date(b.created_at) - new Date(a.created_at);
+      }
       return 0;
     });
   }, [logs, search, teamFilter, sortMode]);
@@ -371,7 +381,7 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
             searchable
             searchPlaceholder="Search teams..."
           />
-          <CustomSelect value={sortMode} onChange={setSortMode} options={SORT_OPTIONS} className="flex-1 sm:w-44" />
+          <CustomSelect value={sortMode} onChange={setSortMode} options={SORT_OPTIONS} className="flex-1 sm:w-48" />
         </div>
       </div>
 

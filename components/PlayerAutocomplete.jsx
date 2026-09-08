@@ -106,8 +106,35 @@ export default function PlayerAutocomplete({ value, onChange, onSelectPlayer, cl
         type="text"
         value={value}
         placeholder="e.g. Luka Modric"
+        onKeyDown={(e) => {
+          if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key >= "0" && e.key <= "9") {
+            e.preventDefault();
+          }
+        }}
+        onPaste={(e) => {
+          e.preventDefault();
+          const raw = e.clipboardData.getData("text");
+          const clean = raw.replace(/[0-9]/g, "");
+          if (!clean) return;
+
+          const target = e.target;
+          const start = target.selectionStart ?? (value || "").length;
+          const end = target.selectionEnd ?? (value || "").length;
+          const current = value || "";
+          const updated = current.slice(0, start) + clean + current.slice(end);
+
+          onChange(updated);
+          setOpen(true);
+
+          setTimeout(() => {
+            if (target) {
+              target.selectionStart = target.selectionEnd = start + clean.length;
+            }
+          }, 0);
+        }}
         onChange={(e) => {
-          onChange(e.target.value);
+          const sanitized = e.target.value.replace(/[0-9]/g, "");
+          onChange(sanitized);
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
