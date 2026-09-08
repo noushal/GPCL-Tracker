@@ -26,25 +26,60 @@ export default function PlayerAutocomplete({ value, onChange, onSelectPlayer, cl
   const boxRef = useRef(null);
 
   useEffect(() => {
-    const term = value.trim();
-    if (term.length < 2) {
+    const raw = (value || "").replace(/[,.]/g, "").trim();
+    if (raw.length < 2) {
       setResults([]);
       return;
     }
 
-    const supabase = createClient();
-    if (!supabase) return;
+    let active = true;
+
     const timeout = setTimeout(async () => {
-      const { data } = await supabase
-        .from("players")
-        .select("id,name,team,position,rating,nationality")
-        .ilike("name", `%${term}%`)
-        .order("rating", { ascending: false })
-        .limit(RESULT_LIMIT * 5);
-      setResults(dedupeByNameAndNationality(data || []).slice(0, RESULT_LIMIT));
+      let combined = [];
+
+      // 1. Try local Supabase database first if configured
+      const supabase = createClient();
+      if (supabase) {
+        try {
+          const { data } = await supabase
+            .from("players")
+            .select("id,name,team,position,rating,nationality")
+            .ilike("name", `%${raw}%`)
+            .order("rating", { ascending: false })
+            .limit(RESULT_LIMIT * 5);
+
+          if (data && data.length > 0) {
+            combined = dedupeByNameAndNationality(data);
+          }
+        } catch (err) {
+          console.warn("Supabase player search error:", err);
+        }
+      }
+
+      // 2. If no local match in Supabase, search online via /api/player-search
+      if (combined.length === 0) {
+        try {
+          const res = await fetch(`/api/player-search?name=${encodeURIComponent(raw)}`);
+          if (res.ok) {
+            const online = await res.json();
+            if (active && Array.isArray(online) && online.length > 0) {
+              combined = dedupeByNameAndNationality(online);
+            }
+          }
+        } catch (err) {
+          console.warn("Online player search error:", err);
+        }
+      }
+
+      if (active) {
+        setResults(combined.slice(0, RESULT_LIMIT));
+      }
     }, 250);
 
-    return () => clearTimeout(timeout);
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+    };
   }, [value]);
 
   useEffect(() => {

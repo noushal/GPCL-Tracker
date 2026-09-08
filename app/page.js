@@ -85,11 +85,22 @@ export default function Home() {
       sale_eligibility: calculateSaleEligibility(form.season, form.window),
     };
 
-    const { error } = editingLog
+    let { error } = editingLog
       ? await supabase.from("transfer_logs").update(payload).eq("id", editingLog.id)
       : await supabase
           .from("transfer_logs")
           .insert({ ...payload, created_by: session?.user?.id ?? null });
+
+    // Fallback: if player_id foreign key constraint fails, retry with player_id: null
+    if (error && error.message?.includes("player_id")) {
+      const fallbackPayload = { ...payload, player_id: null };
+      const fallbackRes = editingLog
+        ? await supabase.from("transfer_logs").update(fallbackPayload).eq("id", editingLog.id)
+        : await supabase
+            .from("transfer_logs")
+            .insert({ ...fallbackPayload, created_by: session?.user?.id ?? null });
+      error = fallbackRes.error;
+    }
 
     if (error) {
       showError(error.message);
