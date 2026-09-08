@@ -44,7 +44,7 @@ export default function UsernameGate() {
       <div className="w-full max-w-sm bg-neutral-800 rounded-2xl shadow-lg border border-neutral-700 p-8">
         <h2 className="text-xl font-semibold text-green-500 mb-2">Choose a username</h2>
         <p className="text-sm text-neutral-400 mb-6">
-          Shown next to transfers you log instead of your email address. Pick one to continue.
+          Shown instead of your email address. Pick a Username , Your email stays private. What name are we putting on the multi-million pound contract?
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <input
