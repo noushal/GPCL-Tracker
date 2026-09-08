@@ -357,7 +357,7 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
       </div>
 
       {/* ── Tablet/desktop: full table ── */}
-      <div className="hidden md:block overflow-x-auto flex-1">
+      <div className="hidden md:block overflow-x-auto flex-1 custom-scrollbar">
         <table className="w-full text-left text-sm whitespace-nowrap">
           <thead className="bg-neutral-900/50 text-neutral-400 border-b border-neutral-700 uppercase tracking-wider text-xs">
             <tr>
