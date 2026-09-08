@@ -156,6 +156,14 @@ export default function TransferForm({ teams, editingLog, onSubmit, onCancelEdit
               // Clear inline error as soon as the user starts correcting
               if (feeError) setFeeError("");
             }}
+            onPaste={(e) => {
+              e.preventDefault();
+              const raw = e.clipboardData.getData("text");
+              // Strip commas and periods (e.g. "40,000,000" or "40.000.000" → "40000000")
+              const sanitized = raw.replace(/[,.]/g, "");
+              set("fee", sanitized);
+              if (feeError) setFeeError("");
+            }}
             className={`w-full bg-neutral-900 border rounded-lg px-4 py-2.5 text-white focus:outline-none focus:ring-1 transition-colors ${
               feeError
                 ? "border-red-500 focus:border-red-500 focus:ring-red-500"
