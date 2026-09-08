@@ -16,6 +16,8 @@ export default function CustomSelect({
   const [query, setQuery] = useState("");
   const boxRef = useRef(null);
   const searchRef = useRef(null);
+  const listRef = useRef(null);
+  const selectedItemRef = useRef(null);
 
   const selected = options.find((o) => o.value === value) ?? options[0];
   const isPlaceholder = selected?.value === "";
@@ -37,13 +39,30 @@ export default function CustomSelect({
   useEffect(() => {
     if (open) {
       setQuery("");
-      setHighlight(options.findIndex((o) => o.value === value));
+      const selectedIndex = options.findIndex((o) => o.value === value);
+      setHighlight(selectedIndex >= 0 ? selectedIndex : 0);
       if (searchable) setTimeout(() => searchRef.current?.focus(), 0);
+
+      // Automatically scroll to the selected option when opened so user doesn't have to scroll from beginning
+      setTimeout(() => {
+        if (listRef.current && selectedItemRef.current) {
+          const list = listRef.current;
+          const item = selectedItemRef.current;
+          const itemTop = item.offsetTop;
+          const itemHeight = item.offsetHeight;
+          const listHeight = list.clientHeight;
+          // Vertically center the selected option so adjacent/next options are immediately visible
+          list.scrollTop = Math.max(0, itemTop - listHeight / 2 + itemHeight / 2);
+        }
+      }, 0);
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
-    if (open) setHighlight(0);
+    if (open) {
+      setHighlight(0);
+      if (listRef.current) listRef.current.scrollTop = 0;
+    }
   }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleKeyDown(e) {
@@ -127,7 +146,7 @@ export default function CustomSelect({
             </div>
           )}
 
-          <div className="overflow-y-auto custom-scrollbar py-1">
+          <div ref={listRef} className="relative overflow-y-auto custom-scrollbar py-1">
             {visibleOptions.length === 0 && (
               <div className="px-3 py-2 text-sm text-neutral-500 italic">No matches.</div>
             )}
@@ -137,6 +156,7 @@ export default function CustomSelect({
                 return (
                   <div
                     key={option.value}
+                    ref={isSelected ? selectedItemRef : null}
                     className="w-full px-3 py-2 text-sm text-neutral-600 italic cursor-default select-none"
                   >
                     {option.label}
@@ -147,6 +167,7 @@ export default function CustomSelect({
                 <button
                   type="button"
                   key={option.value}
+                  ref={isSelected ? selectedItemRef : null}
                   onClick={() => {
                     onChange(option.value);
                     setOpen(false);
