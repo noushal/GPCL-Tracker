@@ -222,7 +222,7 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
   );
 
   return (
-    <div className="lg:col-span-3 bg-neutral-800 rounded-2xl shadow-lg border border-neutral-700 overflow-hidden flex flex-col">
+    <div className="lg:col-span-3 min-w-0 bg-neutral-800 rounded-2xl shadow-lg border border-neutral-700 overflow-hidden flex flex-col">
       {/* ── Header ── */}
       <div className="p-4 sm:p-6 border-b border-neutral-700 flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2">
@@ -347,7 +347,7 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
       </div>
 
       {/* ── Tablet/desktop: full table ── */}
-      <div className="hidden md:block overflow-x-auto flex-1 scrollbar-hidden">
+      <div className="hidden md:block overflow-x-auto flex-1">
         <table className="w-full text-left text-sm whitespace-nowrap">
           <thead className="bg-neutral-900/50 text-neutral-400 border-b border-neutral-700 uppercase tracking-wider text-xs">
             <tr>
