@@ -49,7 +49,11 @@ export default function TeamManager({ teams, editingTeam, onSubmit, onCancelEdit
     if (editingTeam && editingTeam.logo_url && logoPreview === editingTeam.logo_url) return;
 
     const trimmed = debouncedName.trim();
-    if (trimmed.length < 3) {
+    // Strip "(username)" suffix before querying TheSportsDB
+    // e.g. "Celtic (Benernesto59)" → "Celtic"
+    const searchTerm = trimmed.replace(/\s*\(.*\)\s*$/, "").trim();
+
+    if (searchTerm.length < 3) {
       setAutoLogoUrl(null);
       if (!logoFile) setLogoPreview(null);
       setLogoStatus("idle");
@@ -59,7 +63,7 @@ export default function TeamManager({ teams, editingTeam, onSubmit, onCancelEdit
     let cancelled = false;
     setLogoStatus("searching");
 
-    fetch(`/api/team-logo?name=${encodeURIComponent(trimmed)}`)
+    fetch(`/api/team-logo?name=${encodeURIComponent(searchTerm)}`)
       .then((r) => r.json())
       .then(({ logo }) => {
         if (cancelled) return;
