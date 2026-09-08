@@ -48,12 +48,16 @@ export default function TeamsPage() {
     setTimeout(() => setError(""), 4000);
   }
 
-  async function handleSubmitTeam({ name, logoFile }) {
+  async function handleSubmitTeam({ name, logoFile, autoLogoUrl }) {
     const supabase = createClient();
     if (!supabase) return;
 
-    // Upload new logo if one was selected
+    // Determine logo_url:
+    //   1. Manual file upload → upload to Storage, get public URL
+    //   2. Auto-fetched remote URL (TheSportsDB) → store directly, no upload needed
+    //   3. Neither → keep existing logo (edit mode) or null (new)
     let logo_url = editingTeam?.logo_url ?? null;
+
     if (logoFile) {
       const ext = logoFile.name.split(".").pop().toLowerCase();
       const slug = name.toLowerCase().replace(/[^a-z0-9]/g, "-");
@@ -64,6 +68,9 @@ export default function TeamsPage() {
       if (uploadError) { showError(uploadError.message); return; }
       const { data: { publicUrl } } = supabase.storage.from("team-logos").getPublicUrl(path);
       logo_url = publicUrl;
+    } else if (autoLogoUrl) {
+      // Remote URL from TheSportsDB — store directly without re-uploading
+      logo_url = autoLogoUrl;
     }
 
     if (editingTeam) {
