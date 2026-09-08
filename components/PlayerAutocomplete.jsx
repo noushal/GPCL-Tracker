@@ -41,12 +41,22 @@ export default function PlayerAutocomplete({ value, onChange, onSelectPlayer, cl
       const supabase = createClient();
       if (supabase) {
         try {
-          const { data } = await supabase
+          let { data, error } = await supabase
             .from("players")
-            .select("id,name,team,position,rating,nationality")
+            .select("id,name,team,position,rating,nationality,age")
             .ilike("name", `%${raw}%`)
             .order("rating", { ascending: false })
             .limit(RESULT_LIMIT * 5);
+
+          if (error) {
+            const fallback = await supabase
+              .from("players")
+              .select("id,name,team,position,rating,nationality")
+              .ilike("name", `%${raw}%`)
+              .order("rating", { ascending: false })
+              .limit(RESULT_LIMIT * 5);
+            data = fallback.data;
+          }
 
           if (data && data.length > 0) {
             combined = dedupeByNameAndNationality(data);
@@ -122,7 +132,7 @@ export default function PlayerAutocomplete({ value, onChange, onSelectPlayer, cl
                 <div className="min-w-0">
                   <div className="text-white text-sm truncate">{p.name}</div>
                   <div className="text-xs text-neutral-500 truncate">
-                    {p.position} · {p.team} · {p.rating}
+                    {p.position}{p.age ? ` · ${p.age}y` : ""} · {p.team} · {p.rating}
                   </div>
                 </div>
                 {flagUrl && (

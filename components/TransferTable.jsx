@@ -30,22 +30,34 @@ function EmptyState() {
   );
 }
 
-function PlayerName({ log }) {
-  const flagUrl = getFlagUrl(log.players?.nationality);
+function PlayerName({ log, extraInfo }) {
+  const position = log.players?.position || extraInfo?.position;
+  const nationality = log.players?.nationality || extraInfo?.nationality;
+  const age = log.players?.age || extraInfo?.age;
+  const flagUrl = getFlagUrl(nationality);
+
   return (
     <div className="flex items-center gap-2 min-w-0">
       <span className="truncate">{log.player}</span>
-      {log.players?.position && (
+      {position && (
         <span className="text-[10px] font-semibold text-neutral-400 bg-neutral-700/60 px-1.5 py-0.5 rounded shrink-0">
-          {log.players.position}
+          {position}
+        </span>
+      )}
+      {age && (
+        <span
+          className="text-[10px] font-semibold text-neutral-400 bg-neutral-700/60 px-1.5 py-0.5 rounded shrink-0"
+          title={`Age: ${age} years old`}
+        >
+          {age}y
         </span>
       )}
       {flagUrl && (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={flagUrl}
-          alt={log.players.nationality}
-          title={log.players.nationality}
+          alt={nationality}
+          title={nationality}
           className="w-5 h-3.5 object-cover rounded-sm shrink-0 border border-neutral-700"
         />
       )}
@@ -216,6 +228,68 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
     ? processedLogs
     : processedLogs.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
+  // Dynamic cache for player ages and details (e.g. for logs where age is not yet in Supabase)
+  const [playerDetails, setPlayerDetails] = useState(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const cached = localStorage.getItem("gpcl_player_details");
+      return cached ? JSON.parse(cached) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    // Collect any visible log where age is missing in DB and not yet cached
+    const missing = visibleLogs
+      .filter((log) => !log.players?.age && log.player && !playerDetails[log.player.toLowerCase()]?.age)
+      .map((log) => log.player);
+
+    if (missing.length === 0) return;
+
+    const uniqueMissing = [...new Set(missing)];
+    let cancelled = false;
+
+    async function fetchMissingDetails() {
+      for (const playerName of uniqueMissing) {
+        if (cancelled) break;
+        try {
+          const res = await fetch(`/api/player-search?name=${encodeURIComponent(playerName)}`);
+          if (res.ok) {
+            const list = await res.json();
+            if (Array.isArray(list) && list.length > 0) {
+              const matched =
+                list.find((p) => p.name.toLowerCase() === playerName.toLowerCase()) || list[0];
+              if (matched) {
+                setPlayerDetails((prev) => {
+                  const next = {
+                    ...prev,
+                    [playerName.toLowerCase()]: {
+                      age: matched.age,
+                      position: matched.position,
+                      nationality: matched.nationality,
+                    },
+                  };
+                  try {
+                    localStorage.setItem("gpcl_player_details", JSON.stringify(next));
+                  } catch {}
+                  return next;
+                });
+              }
+            }
+          }
+        } catch (err) {
+          console.warn("Could not fetch player details for", playerName, err);
+        }
+      }
+    }
+
+    fetchMissingDetails();
+    return () => {
+      cancelled = true;
+    };
+  }, [visibleLogs, playerDetails]);
+
   const teamOptions = useMemo(
     () => [{ value: "All", label: "All Teams" }, ...teams.map((t) => ({ value: t.name, label: t.name, logo: t.logo_url || null }))],
     [teams]
@@ -312,7 +386,7 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="font-medium text-white">
-                      <PlayerName log={log} />
+                      <PlayerName log={log} extraInfo={playerDetails[log.player?.toLowerCase()]} />
                     </div>
                     <span className="text-xs text-neutral-500">
                       {log.purchase_date || ""}
@@ -380,7 +454,7 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
             {visibleLogs.map((log) => (
               <tr key={log.id} className="hover:bg-neutral-700/30 transition-colors">
                 <td className="px-6 py-4 font-medium text-white">
-                  <PlayerName log={log} />
+                  <PlayerName log={log} extraInfo={playerDetails[log.player?.toLowerCase()]} />
                   <span className="text-xs text-neutral-500">
                     {log.purchase_date || ""}
                     <AddedBy username={log.profiles?.username} />

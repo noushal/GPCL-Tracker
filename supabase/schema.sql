@@ -15,8 +15,11 @@ create table players (
   position text,
   nationality text,
   rating int,
+  age int,
   updated_at timestamptz default now()
 );
+-- Run in Supabase SQL editor if table already exists:
+-- ALTER TABLE players ADD COLUMN IF NOT EXISTS age int;
 create index players_name_trgm_idx on players using gin (name gin_trgm_ops);
 
 create table profiles (

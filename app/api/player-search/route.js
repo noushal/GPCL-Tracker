@@ -41,6 +41,7 @@ async function queryPesdb(term) {
 
       let nationality = "";
       let team = "";
+      let age = null;
       try {
         const pageRes = await fetch(`https://pesdb.net${href}`, {
           headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
@@ -50,6 +51,7 @@ async function queryPesdb(term) {
           const pageHtml = await pageRes.text();
           const natMatch = pageHtml.match(/<dt>Nationality<\/dt>\s*<dd><a[^>]*>([^<]+)<\/a>/i);
           const clubMatch = pageHtml.match(/<dt>Club<\/dt>\s*<dd><a[^>]*>([^<]+)<\/a>/i);
+          const ageMatch = pageHtml.match(/<dt>Age<\/dt>\s*<dd[^>]*>\s*(\d+)\s*<\/dd>/i);
           if (natMatch) {
             nationality = natMatch[1]
               .replace(/&apos;|&#39;|’/g, "'")
@@ -64,6 +66,9 @@ async function queryPesdb(term) {
               .replace(/&quot;/g, '"')
               .trim();
           }
+          if (ageMatch) {
+            age = parseInt(ageMatch[1], 10);
+          }
         }
       } catch {}
 
@@ -74,6 +79,7 @@ async function queryPesdb(term) {
         rating,
         team,
         nationality,
+        age,
       };
     })
   );
@@ -129,9 +135,14 @@ export async function GET(request) {
           team: p.team,
           rating: p.rating,
           nationality: p.nationality,
+          age: p.age,
           updated_at: new Date().toISOString(),
         }));
-        await supabase.from("players").upsert(rows, { onConflict: "id" });
+        let { error: upsertErr } = await supabase.from("players").upsert(rows, { onConflict: "id" });
+        if (upsertErr && (upsertErr.message?.includes("age") || upsertErr.code === "PGRST204")) {
+          const rowsWithoutAge = rows.map(({ age, ...rest }) => rest);
+          await supabase.from("players").upsert(rowsWithoutAge, { onConflict: "id" });
+        }
       } catch (upsertErr) {
         console.warn("Could not cache players to Supabase:", upsertErr);
       }

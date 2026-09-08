@@ -47,10 +47,22 @@ export default function Home() {
   async function refreshAll() {
     const supabase = createClient();
     if (!supabase) return;
-    const [{ data: teamsData }, { data: logsData }] = await Promise.all([
-      supabase.from("teams").select("*").order("name"),
-      supabase.from("transfer_logs").select("*, players(position, nationality), profiles(username)"),
-    ]);
+
+    const teamsPromise = supabase.from("teams").select("*").order("name");
+    const logsPromise = supabase
+      .from("transfer_logs")
+      .select("*, players(position, nationality, age), profiles(username)")
+      .then((res) => {
+        if (res.error) {
+          // Fallback if 'age' column does not exist in Supabase players table yet
+          return supabase
+            .from("transfer_logs")
+            .select("*, players(position, nationality), profiles(username)");
+        }
+        return res;
+      });
+
+    const [{ data: teamsData }, { data: logsData }] = await Promise.all([teamsPromise, logsPromise]);
     setTeams(teamsData || []);
     setLogs(logsData || []);
   }
