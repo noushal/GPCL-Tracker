@@ -95,7 +95,7 @@ export default function PlayerAutocomplete({ value, onChange, onSelectPlayer, cl
       <input
         type="text"
         value={value}
-        placeholder="e.g. Lionel Messi"
+        placeholder="e.g. Luka Modric"
         onChange={(e) => {
           onChange(e.target.value);
           setOpen(true);
