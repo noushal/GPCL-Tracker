@@ -50,8 +50,20 @@ async function queryPesdb(term) {
           const pageHtml = await pageRes.text();
           const natMatch = pageHtml.match(/<dt>Nationality<\/dt>\s*<dd><a[^>]*>([^<]+)<\/a>/i);
           const clubMatch = pageHtml.match(/<dt>Club<\/dt>\s*<dd><a[^>]*>([^<]+)<\/a>/i);
-          if (natMatch) nationality = natMatch[1].trim();
-          if (clubMatch) team = clubMatch[1].trim();
+          if (natMatch) {
+            nationality = natMatch[1]
+              .replace(/&apos;|&#39;|’/g, "'")
+              .replace(/&amp;/g, "&")
+              .replace(/&quot;/g, '"')
+              .trim();
+          }
+          if (clubMatch) {
+            team = clubMatch[1]
+              .replace(/&apos;|&#39;|’/g, "'")
+              .replace(/&amp;/g, "&")
+              .replace(/&quot;/g, '"')
+              .trim();
+          }
         }
       } catch {}
 
