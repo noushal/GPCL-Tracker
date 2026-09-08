@@ -305,7 +305,7 @@ export default function ActivityPage() {
             <div>
               <h1 className="text-3xl font-bold text-amber-500">Activity Log</h1>
               <p className="text-sm text-neutral-500 mt-0.5">
-                Every add/edit/delete, recorded automatically — visible here, never editable from the app.
+                An automated, read-only log of all additions, updates, and deletions.
               </p>
             </div>
           </div>
