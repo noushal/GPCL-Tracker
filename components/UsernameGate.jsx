@@ -52,7 +52,7 @@ export default function UsernameGate() {
             type="text"
             value={username}
             onChange={(e) => setUsername(e.target.value)}
-            placeholder="e.g. noushal"
+            placeholder="e.g. MAKXX"
             className="w-full bg-neutral-900 border border-neutral-600 rounded-lg px-4 py-2.5 text-white focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
           />
           {error && (
