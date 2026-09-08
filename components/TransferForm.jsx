@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import PlayerAutocomplete from "@/components/PlayerAutocomplete";
 import CustomSelect from "@/components/CustomSelect";
-import CustomDatePicker from "@/components/CustomDatePicker";
 
 const SEASONS = Array.from({ length: 8 }, (_, i) => `Season ${i + 1}`);
 const WINDOWS = ["Summer Transfer (Pre-Season)", "Winter Transfer"];
@@ -18,11 +17,10 @@ const emptyForm = {
   fee: "",
   season: "Season 2",
   window: WINDOWS[0],
-  date: "",
 };
 
 // Fields cleared after each successful submission (team is intentionally excluded)
-const RESET_FIELDS = { player: "", playerId: null, fee: "", date: "" };
+const RESET_FIELDS = { player: "", playerId: null, fee: "" };
 
 export default function TransferForm({ teams, editingLog, onSubmit, onCancelEdit, canEdit }) {
   const [form, setForm] = useState(emptyForm);
@@ -38,7 +36,6 @@ export default function TransferForm({ teams, editingLog, onSubmit, onCancelEdit
         fee: editingLog.fee || "",
         season: editingLog.season || "Season 2",
         window: editingLog.transfer_window || WINDOWS[0],
-        date: editingLog.purchase_date || "",
       });
     } else {
       // When leaving edit mode, only reset the player-detail fields so the
@@ -72,8 +69,8 @@ export default function TransferForm({ teams, editingLog, onSubmit, onCancelEdit
     }
     setFeeError("");
 
-    if (!form.team || !form.player.trim() || !form.date) {
-      setError("Please select a team, enter a player name, and choose a date.");
+    if (!form.team || !form.player.trim()) {
+      setError("Please select a team and enter a player name.");
       setTimeout(() => setError(""), 3000);
       return;
     }
@@ -201,10 +198,6 @@ export default function TransferForm({ teams, editingLog, onSubmit, onCancelEdit
           </div>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-neutral-400 mb-1">Date of Transaction</label>
-          <CustomDatePicker value={form.date} onChange={(v) => set("date", v)} />
-        </div>
 
         {error && (
           <div className="text-red-400 text-sm bg-red-400/10 p-3 rounded-lg border border-red-400/20">

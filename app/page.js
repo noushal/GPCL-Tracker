@@ -81,7 +81,7 @@ export default function Home() {
       fee: form.fee || 0,
       season: form.season,
       transfer_window: form.window,
-      purchase_date: form.date,
+      purchase_date: editingLog?.purchase_date || form.date || new Date().toISOString().split("T")[0],
       sale_eligibility: calculateSaleEligibility(form.season, form.window),
     };
 
