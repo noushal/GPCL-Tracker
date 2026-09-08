@@ -48,27 +48,35 @@ export default function TeamsPage() {
     setTimeout(() => setError(""), 4000);
   }
 
-  async function handleSubmitTeam(name) {
+  async function handleSubmitTeam({ name, logoFile }) {
     const supabase = createClient();
     if (!supabase) return;
 
+    // Upload new logo if one was selected
+    let logo_url = editingTeam?.logo_url ?? null;
+    if (logoFile) {
+      const ext = logoFile.name.split(".").pop().toLowerCase();
+      const slug = name.toLowerCase().replace(/[^a-z0-9]/g, "-");
+      const path = `${slug}-${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("team-logos")
+        .upload(path, logoFile, { upsert: true, contentType: logoFile.type });
+      if (uploadError) { showError(uploadError.message); return; }
+      const { data: { publicUrl } } = supabase.storage.from("team-logos").getPublicUrl(path);
+      logo_url = publicUrl;
+    }
+
     if (editingTeam) {
       const oldName = editingTeam.name;
-      const { error } = await supabase.from("teams").update({ name }).eq("id", editingTeam.id);
-      if (error) {
-        showError(error.message);
-        return;
-      }
+      const { error } = await supabase.from("teams").update({ name, logo_url }).eq("id", editingTeam.id);
+      if (error) { showError(error.message); return; }
       if (oldName !== name) {
         await supabase.from("transfer_logs").update({ team: name }).eq("team", oldName);
       }
       setEditingTeam(null);
     } else {
-      const { error } = await supabase.from("teams").insert({ name });
-      if (error) {
-        showError(error.message);
-        return;
-      }
+      const { error } = await supabase.from("teams").insert({ name, logo_url });
+      if (error) { showError(error.message); return; }
     }
     refreshTeams();
   }

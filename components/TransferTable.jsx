@@ -217,9 +217,16 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
     : processedLogs.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const teamOptions = useMemo(
-    () => [{ value: "All", label: "All Teams" }, ...teams.map((t) => ({ value: t.name, label: t.name }))],
+    () => [{ value: "All", label: "All Teams" }, ...teams.map((t) => ({ value: t.name, label: t.name, logo: t.logo_url || null }))],
     [teams]
   );
+
+  // logo lookup: team name → logo URL
+  const teamLogoMap = useMemo(() => {
+    const map = new Map();
+    teams.forEach((t) => { if (t.logo_url) map.set(t.name, t.logo_url); });
+    return map;
+  }, [teams]);
 
   return (
     <div className="lg:col-span-3 min-w-0 bg-neutral-800 rounded-2xl shadow-lg border border-neutral-700 overflow-hidden flex flex-col">
@@ -322,7 +329,10 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div className="min-w-0">
                     <span className="block text-[11px] text-neutral-500 uppercase tracking-wide">Team</span>
-                    <span className="text-neutral-300 truncate block">
+                    <span className="flex items-center gap-1.5 text-neutral-300 truncate">
+                      {teamLogoMap.get(log.team) && (
+                        <img src={teamLogoMap.get(log.team)} alt="" className="w-5 h-5 object-contain rounded shrink-0" />
+                      )}
                       {log.team || <span className="text-neutral-500 italic">Unknown</span>}
                     </span>
                   </div>
@@ -377,7 +387,12 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
                   </span>
                 </td>
                 <td className="px-6 py-4 text-neutral-300">
-                  {log.team || <span className="text-neutral-500 italic">Unknown</span>}
+                  <span className="flex items-center gap-2">
+                    {teamLogoMap.get(log.team) && (
+                      <img src={teamLogoMap.get(log.team)} alt="" className="w-6 h-6 object-contain rounded shrink-0" />
+                    )}
+                    {log.team || <span className="text-neutral-500 italic">Unknown</span>}
+                  </span>
                 </td>
                 <td className="px-6 py-4 text-emerald-400 font-semibold">{formatCurrency(log.fee)}</td>
                 <td className="px-6 py-4">

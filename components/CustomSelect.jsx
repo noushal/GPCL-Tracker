@@ -96,7 +96,12 @@ export default function CustomSelect({
         onClick={() => setOpen((o) => !o)}
         className={`w-full flex items-center justify-between gap-2 bg-neutral-900 border border-neutral-600 rounded-lg text-white text-left hover:border-neutral-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors ${buttonClassName}`}
       >
-        <span className={`truncate ${isPlaceholder ? "text-neutral-500" : ""}`}>{selected?.label}</span>
+        <span className={`flex items-center gap-2 min-w-0 ${isPlaceholder ? "text-neutral-500" : ""}`}>
+          {selected?.logo && (
+            <img src={selected.logo} alt="" className="w-5 h-5 object-contain rounded shrink-0" />
+          )}
+          <span className="truncate">{selected?.label}</span>
+        </span>
         <svg
           className={`w-4 h-4 text-neutral-500 shrink-0 transition-transform ${open ? "rotate-180" : ""}`}
           fill="none"
@@ -151,7 +156,12 @@ export default function CustomSelect({
                     i === highlight ? "bg-neutral-700/60" : ""
                   } ${isSelected ? "text-blue-400" : "text-neutral-200"}`}
                 >
-                  <span className="truncate">{option.label}</span>
+                  <span className="flex items-center gap-2 min-w-0">
+                    {option.logo && (
+                      <img src={option.logo} alt="" className="w-5 h-5 object-contain rounded shrink-0" />
+                    )}
+                    <span className="truncate">{option.label}</span>
+                  </span>
                   {isSelected && (
                     <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />

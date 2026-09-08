@@ -54,7 +54,7 @@ export default function TransferForm({ teams, editingLog, onSubmit, onCancelEdit
   const teamOptions = useMemo(
     () => [
       { value: "", label: "Select a team...", disabled: true },
-      ...teams.map((t) => ({ value: t.name, label: t.name })),
+      ...teams.map((t) => ({ value: t.name, label: t.name, logo: t.logo_url || null })),
     ],
     [teams]
   );
