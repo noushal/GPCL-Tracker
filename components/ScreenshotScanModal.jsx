@@ -19,13 +19,15 @@ export default function ScreenshotScanModal({
   defaultWindow = WINDOWS[0],
   session,
   onSuccess,
+  initialFiles = [],
   initialFile = null,
 }) {
   const [selectedTeam, setSelectedTeam] = useState(defaultTeam);
   const [selectedSeason, setSelectedSeason] = useState(defaultSeason);
   const [selectedWindow, setSelectedWindow] = useState(defaultWindow);
 
-  const [imagePreview, setImagePreview] = useState(null);
+  // Array of loaded images: [{ id, dataUrl, mimeType, name }]
+  const [images, setImages] = useState([]);
   const [isScanning, setIsScanning] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState("");
@@ -42,11 +44,19 @@ export default function ScreenshotScanModal({
     if (defaultWindow) setSelectedWindow(defaultWindow);
   }, [defaultTeam, defaultSeason, defaultWindow]);
 
+  // Handle incoming initial files from paste on parent component
   useEffect(() => {
-    if (initialFile && isOpen) {
-      processImageFile(initialFile);
+    if (!isOpen) return;
+    const filesToProcess = [];
+    if (Array.isArray(initialFiles) && initialFiles.length > 0) {
+      filesToProcess.push(...initialFiles);
+    } else if (initialFile) {
+      filesToProcess.push(initialFile);
     }
-  }, [initialFile, isOpen]);
+    if (filesToProcess.length > 0) {
+      processImageFiles(filesToProcess);
+    }
+  }, [initialFiles, initialFile, isOpen]);
 
   // Handle global paste (Ctrl+V) when modal is open
   useEffect(() => {
@@ -56,25 +66,28 @@ export default function ScreenshotScanModal({
       const items = e.clipboardData?.items;
       if (!items) return;
 
+      const pastedFiles = [];
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.startsWith("image/")) {
           const file = items[i].getAsFile();
-          if (file) {
-            processImageFile(file);
-            break;
-          }
+          if (file) pastedFiles.push(file);
         }
+      }
+
+      if (pastedFiles.length > 0) {
+        e.preventDefault();
+        processImageFiles(pastedFiles);
       }
     }
 
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, [isOpen]);
+  }, [isOpen, images]);
 
   // Reset when closing
   function handleClose() {
     if (isScanning || isImporting) return;
-    setImagePreview(null);
+    setImages([]);
     setPurchases([]);
     setSelectedIndices(new Set());
     setError("");
@@ -82,26 +95,52 @@ export default function ScreenshotScanModal({
     onClose();
   }
 
-  function processImageFile(file) {
-    if (!file.type.startsWith("image/")) {
-      setError("Please upload an image file (PNG, JPEG, WebP).");
+  // Convert File object to base64
+  function readFileAsDataUrl(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  async function processImageFiles(fileList) {
+    const validFiles = Array.from(fileList).filter((f) => f.type.startsWith("image/"));
+    if (validFiles.length === 0) {
+      setError("Please select valid image files (PNG, JPEG, WebP).");
       return;
     }
 
     setError("");
     setSuccessMsg("");
-    setPurchases([]);
 
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const dataUrl = e.target.result;
-      setImagePreview(dataUrl);
-      await scanScreenshot(dataUrl, file.type);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const newImages = await Promise.all(
+        validFiles.map(async (file, idx) => {
+          const dataUrl = await readFileAsDataUrl(file);
+          return {
+            id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${idx}`,
+            dataUrl,
+            mimeType: file.type || "image/png",
+            name: file.name || `Screenshot ${images.length + idx + 1}`,
+          };
+        })
+      );
+
+      // If we already have images, append them and scan only the new ones
+      const hasExistingImages = images.length > 0;
+      setImages((prev) => [...prev, ...newImages]);
+
+      await scanScreenshots(newImages, !hasExistingImages);
+    } catch (err) {
+      setError("Failed to read image file(s): " + err.message);
+    }
   }
 
-  async function scanScreenshot(dataUrl, mimeType) {
+  async function scanScreenshots(imagesToScan, replaceMode = false) {
+    if (!imagesToScan || imagesToScan.length === 0) return;
+
     setIsScanning(true);
     setError("");
 
@@ -110,31 +149,76 @@ export default function ScreenshotScanModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          imageBase64: dataUrl,
-          mimeType,
+          images: imagesToScan.map((img) => ({
+            imageBase64: img.dataUrl,
+            mimeType: img.mimeType,
+          })),
         }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data?.message || "Failed to scan screenshot");
+        throw new Error(data?.message || data?.error || "Failed to scan screenshot(s)");
       }
 
-      if (!data.purchases || data.purchases.length === 0) {
-        setError("No purchases with debit ≥ £1,000,000 found in this screenshot.");
-        setPurchases([]);
-        setSelectedIndices(new Set());
+      const detected = data.purchases || [];
+
+      if (replaceMode) {
+        if (detected.length === 0) {
+          setError("No purchases with debit ≥ £1,000,000 found in the screenshot(s).");
+          setPurchases([]);
+          setSelectedIndices(new Set());
+        } else {
+          setPurchases(detected);
+          setSelectedIndices(new Set(detected.map((_, i) => i)));
+        }
       } else {
-        setPurchases(data.purchases);
-        // Default select all
-        setSelectedIndices(new Set(data.purchases.map((_, i) => i)));
+        // Append mode
+        if (detected.length === 0) {
+          setError("No additional purchases with debit ≥ £1,000,000 found in newly added screenshot(s).");
+        } else {
+          setPurchases((prev) => {
+            const startIdx = prev.length;
+            const updated = [...prev, ...detected];
+            // Auto-select the newly added items
+            setSelectedIndices((oldSet) => {
+              const next = new Set(oldSet);
+              detected.forEach((_, i) => next.add(startIdx + i));
+              return next;
+            });
+            return updated;
+          });
+        }
       }
     } catch (err) {
       setError(err.message);
     } finally {
       setIsScanning(false);
     }
+  }
+
+  function handleRescanAll() {
+    if (images.length === 0) return;
+    scanScreenshots(images, true);
+  }
+
+  function removeImage(id) {
+    setImages((prev) => {
+      const updated = prev.filter((img) => img.id !== id);
+      if (updated.length === 0) {
+        setPurchases([]);
+        setSelectedIndices(new Set());
+      }
+      return updated;
+    });
+  }
+
+  function clearAllImages() {
+    setImages([]);
+    setPurchases([]);
+    setSelectedIndices(new Set());
+    setError("");
   }
 
   const teamOptions = useMemo(
@@ -244,8 +328,8 @@ export default function ScreenshotScanModal({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-neutral-900 border border-neutral-700 w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden text-neutral-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="bg-neutral-900 border border-neutral-700 w-full max-w-4xl rounded-2xl shadow-2xl flex flex-col max-h-[92vh] overflow-hidden text-neutral-200">
         {/* ── Modal Header ── */}
         <div className="p-4 sm:p-5 border-b border-neutral-800 flex items-center justify-between gap-3 bg-neutral-900/80">
           <div className="flex items-center gap-2.5">
@@ -262,13 +346,13 @@ export default function ScreenshotScanModal({
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
-                Scan Purchases from Screenshot
+                Scan Purchases from Screenshots
                 <span className="text-[10px] font-normal px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                   Debit ≥ £1M Only
                 </span>
               </h2>
               <p className="text-xs text-neutral-400">
-                Paste a screenshot with <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-neutral-300 font-mono text-[10px]">Ctrl+V</kbd> or upload
+                Paste screenshots with <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-neutral-300 font-mono text-[10px]">Ctrl+V</kbd> or upload multiple images
               </p>
             </div>
           </div>
@@ -285,7 +369,7 @@ export default function ScreenshotScanModal({
         </div>
 
         {/* ── Modal Body ── */}
-        <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-5 custom-scrollbar">
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4 custom-scrollbar">
           {/* Top transfer config: Team, Season, Window */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-neutral-950/50 p-3.5 rounded-xl border border-neutral-800 text-xs">
             <div>
@@ -308,29 +392,35 @@ export default function ScreenshotScanModal({
             </div>
           </div>
 
-          {/* Upload / Drag & Drop Zone */}
-          {!imagePreview ? (
+          {/* Hidden multi-file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files && e.target.files.length > 0) {
+                processImageFiles(e.target.files);
+                e.target.value = ""; // allow re-selecting same files
+              }
+            }}
+          />
+
+          {/* Upload / Drag & Drop Zone when NO images are loaded */}
+          {images.length === 0 ? (
             <div
               onDragOver={(e) => e.preventDefault()}
               onDrop={(e) => {
                 e.preventDefault();
-                const file = e.dataTransfer?.files?.[0];
-                if (file) processImageFile(file);
+                if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+                  processImageFiles(e.dataTransfer.files);
+                }
               }}
               onClick={() => fileInputRef.current?.click()}
-              className="border-2 border-dashed border-neutral-700 hover:border-blue-500/60 rounded-2xl p-8 sm:p-12 text-center cursor-pointer transition-colors bg-neutral-950/20 hover:bg-neutral-950/40 flex flex-col items-center justify-center gap-3"
+              className="border-2 border-dashed border-neutral-700 hover:border-blue-500/60 rounded-2xl p-8 sm:p-12 text-center cursor-pointer transition-colors bg-neutral-950/20 hover:bg-neutral-950/40 flex flex-col items-center justify-center gap-3 group"
             >
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) processImageFile(file);
-                }}
-              />
-              <div className="w-14 h-14 rounded-2xl bg-neutral-800 border border-neutral-700 flex items-center justify-center text-blue-400 shadow-md">
+              <div className="w-14 h-14 rounded-2xl bg-neutral-800 border border-neutral-700 flex items-center justify-center text-blue-400 shadow-md group-hover:scale-105 transition-transform">
                 <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path
                     strokeLinecap="round"
@@ -341,70 +431,146 @@ export default function ScreenshotScanModal({
                 </svg>
               </div>
               <div>
-                <p className="text-sm font-semibold text-white">Click to choose image or drag & drop</p>
+                <p className="text-sm font-semibold text-white">
+                  Click to choose screenshot(s) or drag & drop
+                </p>
                 <p className="text-xs text-neutral-400 mt-1">
-                  Or simply press <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-neutral-300 font-mono text-[10px]">Ctrl+V</kbd> to paste from clipboard
+                  You can select multiple screenshots at once, or press <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-neutral-300 font-mono text-[10px]">Ctrl+V</kbd> to paste
                 </p>
               </div>
             </div>
           ) : (
             <div className="space-y-4">
-              {/* Image preview & rescan header */}
-              <div className="flex items-center justify-between gap-3 p-3 bg-neutral-950/60 rounded-xl border border-neutral-800 flex-wrap">
-                <div className="flex items-center gap-3 min-w-0">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={imagePreview} alt="Screenshot" className="w-16 h-10 object-cover rounded border border-neutral-700 shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-medium text-white truncate">Screenshot Loaded</p>
-                    <p className="text-[11px] text-neutral-400">
+              {/* Loaded Images Gallery Header & Thumbnails Strip */}
+              <div
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+                    processImageFiles(e.dataTransfer.files);
+                  }
+                }}
+                className="p-3.5 bg-neutral-950/60 rounded-xl border border-neutral-800 space-y-3"
+              >
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <p className="text-xs font-semibold text-white">
+                      {images.length} {images.length === 1 ? "Screenshot" : "Screenshots"} Loaded
+                    </p>
+                    <span className="text-neutral-500 text-xs">·</span>
+                    <p className="text-xs text-neutral-400">
                       {isScanning
-                        ? "Analyzing purchases with Gemini Vision..."
+                        ? "Analyzing with Gemini Vision..."
                         : `${purchases.length} ${purchases.length === 1 ? "purchase" : "purchases"} detected`}
                     </p>
                   </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isScanning || isImporting}
+                      className="text-xs px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition-colors flex items-center gap-1.5 border border-neutral-700"
+                    >
+                      <svg className="w-3.5 h-3.5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                      </svg>
+                      Add More
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRescanAll}
+                      disabled={isScanning || isImporting}
+                      className="text-xs px-2.5 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 transition-colors flex items-center gap-1.5"
+                      title="Re-scan all loaded screenshots"
+                    >
+                      <svg
+                        className={`w-3.5 h-3.5 ${isScanning ? "animate-spin" : ""}`}
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                        />
+                      </svg>
+                      Re-scan All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={clearAllImages}
+                      disabled={isScanning || isImporting}
+                      className="text-xs px-2 py-1.5 rounded-lg text-neutral-400 hover:text-red-400 hover:bg-neutral-800 transition-colors"
+                      title="Clear all screenshots"
+                    >
+                      Clear
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      setImagePreview(null);
-                      setPurchases([]);
-                      setSelectedIndices(new Set());
-                    }}
-                    disabled={isScanning || isImporting}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-colors"
-                  >
-                    Change Image
-                  </button>
-                  <button
-                    onClick={() => scanScreenshot(imagePreview, "image/png")}
-                    disabled={isScanning || isImporting}
-                    className="text-xs px-3 py-1.5 rounded-lg bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-300 transition-colors flex items-center gap-1.5"
-                  >
-                    <svg
-                      className={`w-3.5 h-3.5 ${isScanning ? "animate-spin" : ""}`}
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
+                {/* Thumbnails Row */}
+                <div className="flex items-center gap-2.5 overflow-x-auto pb-1.5 pt-0.5 custom-scrollbar">
+                  {images.map((img, idx) => (
+                    <div
+                      key={img.id}
+                      className="relative group rounded-lg overflow-hidden border border-neutral-700 bg-neutral-900 w-24 h-16 shrink-0 shadow-sm"
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={img.dataUrl}
+                        alt={`Screenshot ${idx + 1}`}
+                        className="w-full h-full object-cover"
                       />
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/50 to-transparent p-1">
+                        <p className="text-[10px] text-neutral-300 truncate font-mono">
+                          #{idx + 1}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeImage(img.id);
+                        }}
+                        disabled={isScanning || isImporting}
+                        className="absolute top-1 right-1 w-4 h-4 rounded-full bg-neutral-900/90 hover:bg-red-600 text-neutral-300 hover:text-white flex items-center justify-center text-[10px] transition-colors shadow"
+                        title="Remove screenshot"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Quick "+ Add" card */}
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isScanning || isImporting}
+                    className="w-20 h-16 rounded-lg border border-dashed border-neutral-700 hover:border-blue-500 bg-neutral-900/50 hover:bg-neutral-900 text-neutral-400 hover:text-blue-400 flex flex-col items-center justify-center gap-1 shrink-0 transition-colors text-[10px] cursor-pointer"
+                    title="Add more screenshots"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
                     </svg>
-                    Re-scan
+                    <span>Add</span>
                   </button>
                 </div>
               </div>
 
-              {/* Scanning status banner */}
+              {/* Scanning status indicator */}
               {isScanning && (
-                <div className="py-8 flex flex-col items-center justify-center gap-3 text-center">
-                  <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                  <p className="text-sm font-medium text-blue-400 animate-pulse">Analyzing purchases with Gemini Vision...</p>
-                  <p className="text-xs text-neutral-500">Extracting transfer records</p>
+                <div className="py-6 flex flex-col items-center justify-center gap-2 text-center bg-neutral-950/30 rounded-xl border border-neutral-800">
+                  <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-xs sm:text-sm font-medium text-blue-400 animate-pulse">
+                    Analyzing {images.length} {images.length === 1 ? "screenshot" : "screenshots"} with Gemini Vision...
+                  </p>
+                  <p className="text-[11px] text-neutral-500">
+                    Extracting all purchases where debit ≥ £1,000,000 in parallel
+                  </p>
                 </div>
               )}
 
@@ -414,6 +580,7 @@ export default function ScreenshotScanModal({
                   <div className="flex items-center justify-between gap-3 text-xs">
                     <div className="flex items-center gap-2">
                       <button
+                        type="button"
                         onClick={toggleSelectAll}
                         className="text-blue-400 hover:underline font-medium"
                       >
@@ -462,7 +629,7 @@ export default function ScreenshotScanModal({
                       <div className="col-span-1 text-right">Action</div>
                     </div>
 
-                    <div className="max-h-72 overflow-y-auto divide-y divide-neutral-800/60 custom-scrollbar">
+                    <div className="max-h-64 sm:max-h-72 overflow-y-auto divide-y divide-neutral-800/60 custom-scrollbar">
                       {purchases.map((item, idx) => {
                         const isSelected = selectedIndices.has(idx);
                         return (
@@ -512,6 +679,7 @@ export default function ScreenshotScanModal({
                             </div>
                             <div className="col-span-1 text-right">
                               <button
+                                type="button"
                                 onClick={() => removePurchase(idx)}
                                 className="text-neutral-500 hover:text-red-400 p-1 rounded transition-colors"
                                 title="Remove row"

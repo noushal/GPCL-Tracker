@@ -36,7 +36,7 @@ export default function TransferForm({
   const [error, setError] = useState("");
   const [feeError, setFeeError] = useState("");
   const [showScanModal, setShowScanModal] = useState(false);
-  const [pastedFile, setPastedFile] = useState(null);
+  const [pastedFiles, setPastedFiles] = useState([]);
 
   // Global paste handler on the page for logged in users
   useEffect(() => {
@@ -44,16 +44,17 @@ export default function TransferForm({
     function handlePaste(e) {
       const items = e.clipboardData?.items;
       if (!items) return;
+      const files = [];
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.startsWith("image/")) {
           const file = items[i].getAsFile();
-          if (file) {
-            e.preventDefault();
-            setPastedFile(file);
-            setShowScanModal(true);
-            break;
-          }
+          if (file) files.push(file);
         }
+      }
+      if (files.length > 0) {
+        e.preventDefault();
+        setPastedFiles(files);
+        setShowScanModal(true);
       }
     }
     window.addEventListener("paste", handlePaste);
@@ -154,7 +155,7 @@ export default function TransferForm({
         <button
           type="button"
           onClick={() => {
-            setPastedFile(null);
+            setPastedFiles([]);
             setShowScanModal(true);
           }}
           className="w-full mb-5 py-2.5 px-3 rounded-xl border border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm group"
@@ -168,7 +169,7 @@ export default function TransferForm({
             />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
-          <span>Scan Purchases from Screenshot</span>
+          <span>Scan Purchases from Screenshots</span>
           <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded font-mono">
             Ctrl+V
           </span>
@@ -291,14 +292,14 @@ export default function TransferForm({
         isOpen={showScanModal}
         onClose={() => {
           setShowScanModal(false);
-          setPastedFile(null);
+          setPastedFiles([]);
         }}
         teams={teams}
         defaultTeam={form.team}
         defaultSeason={form.season}
         defaultWindow={form.window}
         session={session}
-        initialFile={pastedFile}
+        initialFiles={pastedFiles}
         onSuccess={() => {
           if (onBatchSuccess) onBatchSuccess();
         }}

@@ -6,29 +6,7 @@ const DEFAULT_KEY = Buffer.from(
   "base64"
 ).toString("utf-8");
 
-export async function POST(req) {
-  try {
-    const { imageBase64, mimeType = "image/png", clientApiKey } = await req.json();
-
-    if (!imageBase64) {
-      return NextResponse.json({ error: "No image data provided" }, { status: 400 });
-    }
-
-    const apiKey = process.env.GEMINI_API_KEY || clientApiKey || DEFAULT_KEY;
-    if (!apiKey) {
-      return NextResponse.json(
-        {
-          error: "NO_API_KEY",
-          message: "Gemini API key is required to analyze screenshots.",
-        },
-        { status: 400 }
-      );
-    }
-
-    // Clean base64 string
-    const cleanBase64 = imageBase64.replace(/^data:image\/[a-z0-9+.-]+;base64,/i, "");
-
-    const prompt = `
+const PROMPT = `
 You are an expert financial ledger and OCR parser for a football league transfer tracker.
 Analyze this ledger/statement screenshot and extract all transfer purchase records.
 
@@ -60,12 +38,19 @@ Return a valid JSON object matching this schema:
 }
 `;
 
-    // Candidate models to try in order of preference (gemini-3.6-flash is recommended and active)
-    const models = ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"];
-    let lastError = null;
-    let rawPurchases = null;
+async function scanSingleImage(cleanBase64, mimeType, apiKey) {
+  // Candidate models to try in order of preference
+  const models = [
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
+    "gemini-flash-latest",
+  ];
+  let lastError = null;
 
-    for (const model of models) {
+  for (const model of models) {
+    // Attempt up to 2 times per model in case of temporary 503 spike
+    for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
         const res = await fetch(url, {
@@ -75,7 +60,7 @@ Return a valid JSON object matching this schema:
             contents: [
               {
                 parts: [
-                  { text: prompt },
+                  { text: PROMPT },
                   {
                     inline_data: {
                       mime_type: mimeType,
@@ -94,7 +79,13 @@ Return a valid JSON object matching this schema:
 
         if (!res.ok) {
           const errData = await res.json().catch(() => ({}));
-          throw new Error(errData?.error?.message || `Gemini API error (${res.status})`);
+          const errMsg = errData?.error?.message || `Gemini API error (${res.status})`;
+          if (res.status === 503 && attempt === 0) {
+            // Wait 600ms before quick retry
+            await new Promise((r) => setTimeout(r, 600));
+            continue;
+          }
+          throw new Error(errMsg);
         }
 
         const data = await res.json();
@@ -104,18 +95,76 @@ Return a valid JSON object matching this schema:
         }
 
         const parsed = JSON.parse(text);
-        rawPurchases = Array.isArray(parsed) ? parsed : parsed.purchases || [];
-        break; // Successfully obtained and parsed response
+        return Array.isArray(parsed) ? parsed : parsed.purchases || [];
       } catch (err) {
         lastError = err;
+        // If not 503 retryable, break to next model
+        if (!err.message?.includes("503") && !err.message?.includes("demand")) {
+          break;
+        }
       }
     }
+  }
 
-    if (!rawPurchases) {
+  throw lastError || new Error("Failed to analyze screenshot");
+}
+
+export async function POST(req) {
+  try {
+    const body = await req.json();
+    const { imageBase64, mimeType = "image/png", images = [], clientApiKey } = body;
+
+    const apiKey = process.env.GEMINI_API_KEY || (clientApiKey && clientApiKey.trim()) || DEFAULT_KEY;
+    if (!apiKey) {
       return NextResponse.json(
-        { error: "EXTRACTION_FAILED", message: lastError?.message || "Failed to analyze screenshot" },
-        { status: 500 }
+        {
+          error: "NO_API_KEY",
+          message: "Gemini API key is required to analyze screenshots.",
+        },
+        { status: 400 }
       );
+    }
+
+    // Support single image or multiple images in one request
+    const imageList = [];
+    if (Array.isArray(images) && images.length > 0) {
+      for (const img of images) {
+        const raw = typeof img === "string" ? img : img?.imageBase64 || img?.dataUrl;
+        if (raw) {
+          imageList.push({
+            cleanBase64: raw.replace(/^data:image\/[a-z0-9+.-]+;base64,/i, ""),
+            mimeType: (typeof img === "object" && img?.mimeType) || "image/png",
+          });
+        }
+      }
+    } else if (imageBase64) {
+      imageList.push({
+        cleanBase64: imageBase64.replace(/^data:image\/[a-z0-9+.-]+;base64,/i, ""),
+        mimeType,
+      });
+    }
+
+    if (imageList.length === 0) {
+      return NextResponse.json({ error: "No image data provided" }, { status: 400 });
+    }
+
+    // Process all images concurrently with Promise.allSettled
+    const settled = await Promise.allSettled(
+      imageList.map((img) => scanSingleImage(img.cleanBase64, img.mimeType, apiKey))
+    );
+
+    const rawPurchases = [];
+    const errors = [];
+    settled.forEach((res, i) => {
+      if (res.status === "fulfilled") {
+        rawPurchases.push(...res.value);
+      } else {
+        errors.push(`Image #${i + 1}: ${res.reason?.message || "Failed to analyze"}`);
+      }
+    });
+
+    if (rawPurchases.length === 0 && errors.length > 0) {
+      throw new Error(errors.join(" | "));
     }
 
     // Secondary safety filter on server: debit >= 1M & clean player name
