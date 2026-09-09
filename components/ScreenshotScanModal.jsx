@@ -345,11 +345,8 @@ export default function ScreenshotScanModal({
               </svg>
             </div>
             <div>
-              <h2 className="text-base sm:text-lg font-semibold text-white flex items-center gap-2">
+              <h2 className="text-base sm:text-lg font-semibold text-white">
                 Scan Purchases from Screenshots
-                <span className="text-[10px] font-normal px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                  Debit ≥ £1M Only
-                </span>
               </h2>
               <p className="text-xs text-neutral-400">
                 Paste screenshots with <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-neutral-300 font-mono text-[10px]">Ctrl+V</kbd> or upload multiple images
