@@ -38,9 +38,9 @@ export default function TransferForm({
   const [showScanModal, setShowScanModal] = useState(false);
   const [pastedFiles, setPastedFiles] = useState([]);
 
-  // Global paste handler on the page for logged in users
+  // Global paste handler on the page for logged in users (disabled when modal is open)
   useEffect(() => {
-    if (!canEdit || editingLog) return;
+    if (!canEdit || editingLog || showScanModal) return;
     function handlePaste(e) {
       const items = e.clipboardData?.items;
       if (!items) return;
@@ -59,7 +59,7 @@ export default function TransferForm({
     }
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, [canEdit, editingLog]);
+  }, [canEdit, editingLog, showScanModal]);
 
   useEffect(() => {
     if (editingLog) {
@@ -292,6 +292,9 @@ export default function TransferForm({
         isOpen={showScanModal}
         onClose={() => {
           setShowScanModal(false);
+          setPastedFiles([]);
+        }}
+        onClearInitialFiles={() => {
           setPastedFiles([]);
         }}
         teams={teams}

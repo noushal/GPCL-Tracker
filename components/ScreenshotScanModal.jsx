@@ -21,6 +21,7 @@ export default function ScreenshotScanModal({
   onSuccess,
   initialFiles = [],
   initialFile = null,
+  onClearInitialFiles = null,
 }) {
   const [selectedTeam, setSelectedTeam] = useState(defaultTeam);
   const [selectedSeason, setSelectedSeason] = useState(defaultSeason);
@@ -28,6 +29,13 @@ export default function ScreenshotScanModal({
 
   // Array of loaded images: [{ id, dataUrl, mimeType, name }]
   const [images, setImages] = useState([]);
+  const imagesRef = useRef([]);
+  const processedInitialRef = useRef(false);
+
+  useEffect(() => {
+    imagesRef.current = images;
+  }, [images]);
+
   const [isScanning, setIsScanning] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState("");
@@ -44,9 +52,14 @@ export default function ScreenshotScanModal({
     if (defaultWindow) setSelectedWindow(defaultWindow);
   }, [defaultTeam, defaultSeason, defaultWindow]);
 
-  // Handle incoming initial files from paste on parent component
+  // Handle incoming initial files from paste on parent component (only once per modal open)
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen) {
+      processedInitialRef.current = false;
+      return;
+    }
+    if (processedInitialRef.current) return;
+
     const filesToProcess = [];
     if (Array.isArray(initialFiles) && initialFiles.length > 0) {
       filesToProcess.push(...initialFiles);
@@ -54,9 +67,11 @@ export default function ScreenshotScanModal({
       filesToProcess.push(initialFile);
     }
     if (filesToProcess.length > 0) {
+      processedInitialRef.current = true;
       processImageFiles(filesToProcess);
+      if (onClearInitialFiles) onClearInitialFiles();
     }
-  }, [initialFiles, initialFile, isOpen]);
+  }, [initialFiles, initialFile, isOpen, onClearInitialFiles]);
 
   // Handle global paste (Ctrl+V) when modal is open
   useEffect(() => {
@@ -82,11 +97,13 @@ export default function ScreenshotScanModal({
 
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, [isOpen, images]);
+  }, [isOpen]);
 
   // Reset when closing
   function handleClose() {
     if (isScanning || isImporting) return;
+    imagesRef.current = [];
+    processedInitialRef.current = false;
     setImages([]);
     setPurchases([]);
     setSelectedIndices(new Set());
@@ -116,23 +133,41 @@ export default function ScreenshotScanModal({
     setSuccessMsg("");
 
     try {
-      const newImages = await Promise.all(
+      const rawImages = await Promise.all(
         validFiles.map(async (file, idx) => {
           const dataUrl = await readFileAsDataUrl(file);
           return {
             id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}-${idx}`,
             dataUrl,
             mimeType: file.type || "image/png",
-            name: file.name || `Screenshot ${images.length + idx + 1}`,
+            name: file.name || `Screenshot ${imagesRef.current.length + idx + 1}`,
           };
         })
       );
 
-      // If we already have images, append them and scan only the new ones
-      const hasExistingImages = images.length > 0;
-      setImages((prev) => [...prev, ...newImages]);
+      // Intra-batch deduplication: prevent identical items in the same paste
+      const batchUnique = [];
+      const seenInBatch = new Set();
+      for (const img of rawImages) {
+        if (!seenInBatch.has(img.dataUrl)) {
+          seenInBatch.add(img.dataUrl);
+          batchUnique.push(img);
+        }
+      }
 
-      await scanScreenshots(newImages, !hasExistingImages);
+      // Filter against existing images using imagesRef to prevent duplicate paste
+      const existingDataUrls = new Set(imagesRef.current.map((i) => i.dataUrl));
+      const uniqueToScan = batchUnique.filter((img) => !existingDataUrls.has(img.dataUrl));
+
+      if (uniqueToScan.length === 0) {
+        return; // Already present, ignore duplicate paste
+      }
+
+      const isFirstBatch = imagesRef.current.length === 0;
+      imagesRef.current = [...imagesRef.current, ...uniqueToScan];
+      setImages([...imagesRef.current]);
+
+      await scanScreenshots(uniqueToScan, isFirstBatch);
     } catch (err) {
       setError("Failed to read image file(s): " + err.message);
     }
@@ -204,17 +239,16 @@ export default function ScreenshotScanModal({
   }
 
   function removeImage(id) {
-    setImages((prev) => {
-      const updated = prev.filter((img) => img.id !== id);
-      if (updated.length === 0) {
-        setPurchases([]);
-        setSelectedIndices(new Set());
-      }
-      return updated;
-    });
+    imagesRef.current = imagesRef.current.filter((img) => img.id !== id);
+    setImages([...imagesRef.current]);
+    if (imagesRef.current.length === 0) {
+      setPurchases([]);
+      setSelectedIndices(new Set());
+    }
   }
 
   function clearAllImages() {
+    imagesRef.current = [];
     setImages([]);
     setPurchases([]);
     setSelectedIndices(new Set());
