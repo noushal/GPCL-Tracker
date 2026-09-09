@@ -429,7 +429,7 @@ export default function ScreenshotScanModal({
                     <p className="text-[11px] text-neutral-400">
                       {isScanning
                         ? "Analyzing purchases with Gemini Vision..."
-                        : `${purchases.length} purchases detected (Debt ≥ £1M)`}
+                        : `${purchases.length} ${purchases.length === 1 ? "purchase" : "purchases"} detected`}
                     </p>
                   </div>
                 </div>
@@ -473,8 +473,8 @@ export default function ScreenshotScanModal({
               {isScanning && (
                 <div className="py-8 flex flex-col items-center justify-center gap-3 text-center">
                   <div className="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                  <p className="text-sm font-medium text-blue-400 animate-pulse">Reading purchase ledger & filtering debts ≥ £1,000,000...</p>
-                  <p className="text-xs text-neutral-500">Excluding credit transactions and purchases under £1M</p>
+                  <p className="text-sm font-medium text-blue-400 animate-pulse">Analyzing purchases with Gemini Vision...</p>
+                  <p className="text-xs text-neutral-500">Extracting transfer records</p>
                 </div>
               )}
 
@@ -528,7 +528,7 @@ export default function ScreenshotScanModal({
                       </div>
                       <div className="col-span-3">Date</div>
                       <div className="col-span-4">Player</div>
-                      <div className="col-span-3">Fee (Debt)</div>
+                      <div className="col-span-3">Transfer Fee</div>
                       <div className="col-span-1 text-right">Action</div>
                     </div>
 
