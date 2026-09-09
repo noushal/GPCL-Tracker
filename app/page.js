@@ -210,6 +210,8 @@ export default function Home() {
             onSubmit={handleSubmitLog}
             onCancelEdit={() => setEditingLog(null)}
             canEdit={isAuthed}
+            session={session}
+            onBatchSuccess={refreshAll}
           />
           <TransferTable
             logs={logs}
