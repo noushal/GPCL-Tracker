@@ -54,7 +54,7 @@
 						</h3>
 						<ul class="text-xs text-neutral-400 space-y-1 list-disc pl-4">
 							<li>
-								Purchases lock the player from being <strong>sold</strong> until the <em>following</em> season or after following Transfer Window.
+								Purchases lock the player from being <strong>sold</strong> until the <em>following</em> season.
 							</li>
 						</ul>
 					</div>
@@ -168,6 +168,7 @@
 									<option value="za">Player (Z-A)</option>
 									<option value="fee-desc">Fee (High to Low)</option>
 									<option value="fee-asc">Fee (Low to High)</option>
+									<option value="duplicates">Duplicate Values</option>
 								</select>
 							</div>
 						</div>
@@ -320,7 +321,24 @@
 			return matchesSearch && matchesTeam;
 			});
 
+			if (sortMode === 'duplicates') {
+				const playerCounts = new Map();
+				logs.forEach(l => {
+					const name = (l.player || '').trim().toLowerCase();
+					if (name) playerCounts.set(name, (playerCounts.get(name) || 0) + 1);
+				});
+				processedLogs = processedLogs.filter(l => {
+					const name = (l.player || '').trim().toLowerCase();
+					return (playerCounts.get(name) || 0) > 1;
+				});
+			}
+
 			processedLogs.sort((a, b) => {
+			if (sortMode === 'duplicates') {
+				const nameComp = (a.player || '').localeCompare(b.player || '');
+				if (nameComp !== 0) return nameComp;
+				return parseInt(b.id) - parseInt(a.id);
+			}
 			if (sortMode === 'newest') return parseInt(b.id) - parseInt(a.id);
 			if (sortMode === 'oldest') return parseInt(a.id) - parseInt(b.id);
 			if (sortMode === 'az') return a.player.localeCompare(b.player);
@@ -336,7 +354,9 @@
 			return 0;
 			});
 
-			logCount.textContent = `${processedLogs.length} ${processedLogs.length === 1 ? 'Record' : 'Records'}`;
+			logCount.textContent = sortMode === 'duplicates'
+				? `${processedLogs.length} Duplicate ${processedLogs.length === 1 ? 'Record' : 'Records'}`
+				: `${processedLogs.length} ${processedLogs.length === 1 ? 'Record' : 'Records'}`;
 			tableBody.innerHTML = '';
 
 			if (processedLogs.length === 0) {
@@ -347,7 +367,7 @@
 						<svg class="w-12 h-12 mb-3 text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
 						</svg>
-						<p>No matching transfers found.</p>
+						<p>${sortMode === 'duplicates' ? 'No duplicate transfers found.' : 'No matching transfers found.'}</p>
 					</div>
 				</td>
 			</tr>

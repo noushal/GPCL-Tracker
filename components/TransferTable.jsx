@@ -14,32 +14,47 @@ const SORT_OPTIONS = [
   { value: "za", label: "Player (Z-A)" },
   { value: "fee-desc", label: "Fee (High to Low)" },
   { value: "fee-asc", label: "Fee (Low to High)" },
+  { value: "duplicates", label: "Duplicate Values" },
 ];
 
-function EmptyState() {
+function EmptyState({ isDuplicateMode = false }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-12 text-center text-neutral-500">
-      <svg className="w-12 h-12 mb-3 text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth="1"
-          d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
-        />
-      </svg>
-      <p>No matching transfers found.</p>
+      {isDuplicateMode ? (
+        <>
+          <div className="w-12 h-12 mb-3 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <p className="text-neutral-200 font-medium">No duplicate transfers found</p>
+          <p className="text-xs text-neutral-500 mt-1">All player transfer records are unique.</p>
+        </>
+      ) : (
+        <>
+          <svg className="w-12 h-12 mb-3 text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth="1"
+              d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
+            />
+          </svg>
+          <p>No matching transfers found.</p>
+        </>
+      )}
     </div>
   );
 }
 
-function PlayerName({ log, extraInfo }) {
+function PlayerName({ log, extraInfo, duplicateInfo }) {
   const position = log.players?.position || extraInfo?.position;
   const nationality = log.players?.nationality || extraInfo?.nationality;
   const age = log.players?.age || extraInfo?.age;
   const flagUrl = getFlagUrl(nationality);
 
   return (
-    <div className="flex items-center gap-2 min-w-0">
+    <div className="flex items-center gap-2 min-w-0 flex-wrap">
       <span className="truncate">{log.player}</span>
       {position && (
         <span className="text-[10px] font-semibold text-neutral-400 bg-neutral-700/60 px-1.5 py-0.5 rounded shrink-0">
@@ -62,6 +77,21 @@ function PlayerName({ log, extraInfo }) {
           title={nationality}
           className="w-5 h-3.5 object-cover rounded-sm shrink-0 border border-neutral-700"
         />
+      )}
+      {duplicateInfo && duplicateInfo.count > 1 && (
+        <span
+          className={`text-[10px] font-semibold px-1.5 py-0.5 rounded shrink-0 border flex items-center gap-1 ${
+            duplicateInfo.isExact
+              ? "bg-red-500/20 text-red-300 border-red-500/40"
+              : "bg-amber-500/20 text-amber-300 border-amber-500/40"
+          }`}
+          title={duplicateInfo.tooltip}
+        >
+          <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          {duplicateInfo.isExact ? "Exact Duplicate" : `Duplicate (${duplicateInfo.count}x)`}
+        </span>
       )}
     </div>
   );
@@ -197,6 +227,74 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
 
   const isTeamSelected = teamFilter !== "All";
 
+  // Group logs by normalized player name across all transfers
+  const playerStats = useMemo(() => {
+    const map = new Map();
+    logs.forEach((log) => {
+      const key = (log.player || "").trim().toLowerCase();
+      if (!key) return;
+      if (!map.has(key)) {
+        map.set(key, { logs: [], teams: new Set() });
+      }
+      const entry = map.get(key);
+      entry.logs.push(log);
+      if (log.team) entry.teams.add(log.team);
+    });
+    return map;
+  }, [logs]);
+
+  // Exact duplicate signature check (same player + same team + same season + same window)
+  const exactDuplicateMap = useMemo(() => {
+    const map = new Map();
+    logs.forEach((log) => {
+      const key = [
+        (log.player || "").trim().toLowerCase(),
+        (log.team || "").trim().toLowerCase(),
+        (log.season || "").trim().toLowerCase(),
+        (log.transfer_window || "").trim().toLowerCase(),
+      ].join("||");
+      map.set(key, (map.get(key) || 0) + 1);
+    });
+    return map;
+  }, [logs]);
+
+  const getDuplicateInfo = (log) => {
+    const key = (log.player || "").trim().toLowerCase();
+    const stats = playerStats.get(key);
+    const count = stats?.logs?.length || 0;
+    if (count <= 1) return null;
+
+    const exactKey = [
+      (log.player || "").trim().toLowerCase(),
+      (log.team || "").trim().toLowerCase(),
+      (log.season || "").trim().toLowerCase(),
+      (log.transfer_window || "").trim().toLowerCase(),
+    ].join("||");
+    const exactCount = exactDuplicateMap.get(exactKey) || 0;
+    const isExact = exactCount > 1;
+
+    const teamList = Array.from(stats?.teams || []);
+    const otherTeams = teamList.filter((t) => t !== log.team);
+
+    let tooltip = "";
+    if (isExact) {
+      tooltip = `Exact duplicate: ${exactCount} identical transfer logs found for ${log.player} in ${log.team}`;
+    } else if (otherTeams.length > 0) {
+      tooltip = `Duplicate player: logged ${count} times across ${teamList.join(", ")}`;
+    } else {
+      tooltip = `Duplicate player: logged ${count} times for ${log.team}`;
+    }
+
+    return {
+      count,
+      isExact,
+      exactCount,
+      isMultipleTeams: otherTeams.length > 0,
+      otherTeams,
+      tooltip,
+    };
+  };
+
   // Reset page to 1 whenever filters, sort, or view-mode changes
   useEffect(() => {
     setCurrentPage(1);
@@ -209,13 +307,30 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
 
   const processedLogs = useMemo(() => {
     const term = search.toLowerCase();
-    const filtered = logs.filter((log) => {
+    let filtered = logs.filter((log) => {
       const matchesSearch = log.player.toLowerCase().includes(term);
       const matchesTeam = teamFilter === "All" || log.team === teamFilter;
       return matchesSearch && matchesTeam;
     });
 
+    if (sortMode === "duplicates") {
+      filtered = filtered.filter((log) => {
+        const key = (log.player || "").trim().toLowerCase();
+        const stats = playerStats.get(key);
+        return (stats?.logs?.length || 0) > 1;
+      });
+    }
+
     return [...filtered].sort((a, b) => {
+      if (sortMode === "duplicates") {
+        // Group identical players together alphabetically
+        const nameComp = (a.player || "").localeCompare(b.player || "");
+        if (nameComp !== 0) return nameComp;
+        // Within the same player, sort newest transfer first
+        const dateA = new Date(a.created_at || a.purchase_date || 0).getTime();
+        const dateB = new Date(b.created_at || b.purchase_date || 0).getTime();
+        return dateB - dateA;
+      }
       if (sortMode === "newest") return new Date(b.created_at) - new Date(a.created_at);
       if (sortMode === "oldest") return new Date(a.created_at) - new Date(b.created_at);
       if (sortMode === "az") return a.player.localeCompare(b.player);
@@ -230,7 +345,13 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
       }
       return 0;
     });
-  }, [logs, search, teamFilter, sortMode]);
+  }, [logs, search, teamFilter, sortMode, playerStats]);
+
+  const uniqueDuplicatePlayersCount = useMemo(() => {
+    if (sortMode !== "duplicates") return 0;
+    const set = new Set(processedLogs.map((l) => (l.player || "").trim().toLowerCase()).filter(Boolean));
+    return set.size;
+  }, [sortMode, processedLogs]);
 
   // Pagination slicing — bypassed entirely in Full Team View
   const totalPages = isFullTeamView ? 1 : Math.ceil(processedLogs.length / PAGE_SIZE);
@@ -347,11 +468,21 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
             </button>
           )}
 
-          <span className="bg-neutral-900 text-neutral-400 text-xs px-3 py-1 rounded-full border border-neutral-700">
-            {isFullTeamView
-              ? `${processedLogs.length} ${processedLogs.length === 1 ? "Record" : "Records"} — Full View`
-              : `${processedLogs.length} ${processedLogs.length === 1 ? "Record" : "Records"}`}
-          </span>
+          {sortMode === "duplicates" ? (
+            <span className="bg-amber-500/10 text-amber-300 text-xs px-3 py-1 rounded-full border border-amber-500/30 flex items-center gap-1.5 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+              {processedLogs.length === 0
+                ? "0 Duplicates Found"
+                : `${processedLogs.length} Duplicate ${processedLogs.length === 1 ? "Record" : "Records"} (${uniqueDuplicatePlayersCount} ${uniqueDuplicatePlayersCount === 1 ? "player" : "players"})`}
+              {isFullTeamView && " — Full View"}
+            </span>
+          ) : (
+            <span className="bg-neutral-900 text-neutral-400 text-xs px-3 py-1 rounded-full border border-neutral-700">
+              {isFullTeamView
+                ? `${processedLogs.length} ${processedLogs.length === 1 ? "Record" : "Records"} — Full View`
+                : `${processedLogs.length} ${processedLogs.length === 1 ? "Record" : "Records"}`}
+            </span>
+          )}
         </div>
       </div>
 
@@ -381,61 +512,84 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
             searchable
             searchPlaceholder="Search teams..."
           />
-          <CustomSelect value={sortMode} onChange={setSortMode} options={SORT_OPTIONS} className="flex-1 sm:w-48" />
+          <CustomSelect value={sortMode} onChange={setSortMode} options={SORT_OPTIONS} className="flex-1 sm:w-52" />
         </div>
       </div>
 
       {/* ── Mobile: stacked cards ── */}
       <div className="md:hidden flex-1">
         {visibleLogs.length === 0 ? (
-          <EmptyState />
+          <EmptyState isDuplicateMode={sortMode === "duplicates"} />
         ) : (
           <div className="divide-y divide-neutral-700/50">
-            {visibleLogs.map((log) => (
-              <div key={log.id} className="p-4 space-y-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="font-medium text-white">
-                      <PlayerName log={log} extraInfo={playerDetails[log.player?.toLowerCase()]} />
+            {visibleLogs.map((log) => {
+              const dupInfo = getDuplicateInfo(log);
+              return (
+                <div
+                  key={log.id}
+                  className={`p-4 space-y-3 transition-colors ${
+                    sortMode === "duplicates"
+                      ? dupInfo?.isExact
+                        ? "bg-red-950/20 border-l-2 border-l-red-500"
+                        : "bg-amber-950/15 border-l-2 border-l-amber-500"
+                      : ""
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-medium text-white">
+                        <PlayerName
+                          log={log}
+                          extraInfo={playerDetails[log.player?.toLowerCase()]}
+                          duplicateInfo={dupInfo}
+                        />
+                      </div>
+                      <span className="text-xs text-neutral-500">
+                        {log.purchase_date || ""}
+                        <AddedBy username={log.profiles?.username} />
+                      </span>
                     </div>
-                    <span className="text-xs text-neutral-500">
-                      {log.purchase_date || ""}
-                      <AddedBy username={log.profiles?.username} />
-                    </span>
+                    {canEdit && (
+                      <div className="flex gap-1 shrink-0 -mr-1.5">
+                        <RowActions log={log} onEdit={onEdit} onDelete={onDelete} />
+                      </div>
+                    )}
                   </div>
-                  {canEdit && (
-                    <div className="flex gap-1 shrink-0 -mr-1.5">
-                      <RowActions log={log} onEdit={onEdit} onDelete={onDelete} />
+
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    <div className="min-w-0">
+                      <span className="block text-[11px] text-neutral-500 uppercase tracking-wide">Team</span>
+                      <span className="flex items-center gap-1.5 text-neutral-300 truncate">
+                        {teamLogoMap.get(log.team) && (
+                          <img src={teamLogoMap.get(log.team)} alt="" className="w-5 h-5 object-contain rounded shrink-0" />
+                        )}
+                        <span className="truncate">
+                          {log.team || <span className="text-neutral-500 italic">Unknown</span>}
+                          {dupInfo?.isMultipleTeams && teamFilter !== "All" && dupInfo.otherTeams.length > 0 && (
+                            <span className="block text-[10px] text-amber-400 font-normal">
+                              Also in {dupInfo.otherTeams.join(", ")}
+                            </span>
+                          )}
+                        </span>
+                      </span>
                     </div>
-                  )}
-                </div>
+                    <div>
+                      <span className="block text-[11px] text-neutral-500 uppercase tracking-wide">Fee</span>
+                      <span className="text-emerald-400 font-semibold">{formatCurrency(log.fee)}</span>
+                    </div>
+                    <div>
+                      <span className="block text-[11px] text-neutral-500 uppercase tracking-wide">Purchased In</span>
+                      <span className="block text-white">{log.season}</span>
+                      <span className="text-xs text-neutral-400">{log.transfer_window}</span>
+                    </div>
+                  </div>
 
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="min-w-0">
-                    <span className="block text-[11px] text-neutral-500 uppercase tracking-wide">Team</span>
-                    <span className="flex items-center gap-1.5 text-neutral-300 truncate">
-                      {teamLogoMap.get(log.team) && (
-                        <img src={teamLogoMap.get(log.team)} alt="" className="w-5 h-5 object-contain rounded shrink-0" />
-                      )}
-                      {log.team || <span className="text-neutral-500 italic">Unknown</span>}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="block text-[11px] text-neutral-500 uppercase tracking-wide">Fee</span>
-                    <span className="text-emerald-400 font-semibold">{formatCurrency(log.fee)}</span>
-                  </div>
-                  <div>
-                    <span className="block text-[11px] text-neutral-500 uppercase tracking-wide">Purchased In</span>
-                    <span className="block text-white">{log.season}</span>
-                    <span className="text-xs text-neutral-400">{log.transfer_window}</span>
-                  </div>
+                  <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-1 rounded-md text-xs font-semibold block w-fit">
+                    Locked till {log.sale_eligibility}
+                  </span>
                 </div>
-
-                <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-1 rounded-md text-xs font-semibold block w-fit">
-                  Locked till {log.sale_eligibility}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -457,42 +611,65 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
             {visibleLogs.length === 0 && (
               <tr>
                 <td colSpan={6}>
-                  <EmptyState />
+                  <EmptyState isDuplicateMode={sortMode === "duplicates"} />
                 </td>
               </tr>
             )}
-            {visibleLogs.map((log) => (
-              <tr key={log.id} className="hover:bg-neutral-700/30 transition-colors">
-                <td className="px-6 py-4 font-medium text-white">
-                  <PlayerName log={log} extraInfo={playerDetails[log.player?.toLowerCase()]} />
-                  <span className="text-xs text-neutral-500">
-                    {log.purchase_date || ""}
-                    <AddedBy username={log.profiles?.username} />
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-neutral-300">
-                  <span className="flex items-center gap-2">
-                    {teamLogoMap.get(log.team) && (
-                      <img src={teamLogoMap.get(log.team)} alt="" className="w-6 h-6 object-contain rounded shrink-0" />
-                    )}
-                    {log.team || <span className="text-neutral-500 italic">Unknown</span>}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-emerald-400 font-semibold">{formatCurrency(log.fee)}</td>
-                <td className="px-6 py-4">
-                  <span className="block text-white">{log.season}</span>
-                  <span className="text-xs text-neutral-400">{log.transfer_window}</span>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-1 rounded-md text-xs font-semibold block w-fit">
-                    Locked till {log.sale_eligibility}
-                  </span>
-                </td>
-                <td className="px-6 py-4 text-right space-x-1">
-                  {canEdit && <RowActions log={log} onEdit={onEdit} onDelete={onDelete} />}
-                </td>
-              </tr>
-            ))}
+            {visibleLogs.map((log) => {
+              const dupInfo = getDuplicateInfo(log);
+              return (
+                <tr
+                  key={log.id}
+                  className={`transition-colors ${
+                    sortMode === "duplicates"
+                      ? dupInfo?.isExact
+                        ? "bg-red-950/20 hover:bg-red-950/35 border-l-2 border-l-red-500"
+                        : "bg-amber-950/15 hover:bg-amber-950/30 border-l-2 border-l-amber-500"
+                      : "hover:bg-neutral-700/30"
+                  }`}
+                >
+                  <td className="px-6 py-4 font-medium text-white">
+                    <PlayerName
+                      log={log}
+                      extraInfo={playerDetails[log.player?.toLowerCase()]}
+                      duplicateInfo={dupInfo}
+                    />
+                    <span className="text-xs text-neutral-500">
+                      {log.purchase_date || ""}
+                      <AddedBy username={log.profiles?.username} />
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-neutral-300">
+                    <span className="flex items-center gap-2">
+                      {teamLogoMap.get(log.team) && (
+                        <img src={teamLogoMap.get(log.team)} alt="" className="w-6 h-6 object-contain rounded shrink-0" />
+                      )}
+                      <span>
+                        {log.team || <span className="text-neutral-500 italic">Unknown</span>}
+                        {dupInfo?.isMultipleTeams && teamFilter !== "All" && dupInfo.otherTeams.length > 0 && (
+                          <span className="block text-[11px] text-amber-400 font-normal">
+                            Also in {dupInfo.otherTeams.join(", ")}
+                          </span>
+                        )}
+                      </span>
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-emerald-400 font-semibold">{formatCurrency(log.fee)}</td>
+                  <td className="px-6 py-4">
+                    <span className="block text-white">{log.season}</span>
+                    <span className="text-xs text-neutral-400">{log.transfer_window}</span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-1 rounded-md text-xs font-semibold block w-fit">
+                      Locked till {log.sale_eligibility}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right space-x-1">
+                    {canEdit && <RowActions log={log} onEdit={onEdit} onDelete={onDelete} />}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -509,8 +686,14 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
       {/* ── Full Team View footer note ── */}
       {isFullTeamView && processedLogs.length > 0 && (
         <div className="px-4 py-3 border-t border-neutral-700 text-xs text-center text-neutral-500">
-          Showing all <span className="text-purple-400 font-semibold">{processedLogs.length}</span> records for{" "}
-          <span className="text-purple-400 font-semibold">{teamFilter}</span>
+          Showing all{" "}
+          <span className={sortMode === "duplicates" ? "text-amber-400 font-semibold" : "text-purple-400 font-semibold"}>
+            {processedLogs.length}
+          </span>{" "}
+          {sortMode === "duplicates" ? "duplicate records" : "records"} for{" "}
+          <span className={sortMode === "duplicates" ? "text-amber-400 font-semibold" : "text-purple-400 font-semibold"}>
+            {teamFilter}
+          </span>
         </div>
       )}
     </div>

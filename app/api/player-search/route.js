@@ -9,6 +9,20 @@ import { createClient } from "@supabase/supabase-js";
  * Caches newly found players into the Supabase players table when service key is present.
  */
 
+// Curated / known players that may not be easily resolved by pesdb's first page of results
+const KNOWN_PLAYERS = [
+  {
+    id: 134512,
+    name: "Juan",
+    position: "CF",
+    team: "Göztepe SK",
+    nationality: "Brazil",
+    rating: 73,
+    age: 24,
+    aliases: ["juan", "juan santos", "juan santos da silva", "santos da silva", "juan silva", "juan goztepe"],
+  },
+];
+
 async function queryPesdb(term) {
   const url = `https://pesdb.net/efootball/players/?name=${encodeURIComponent(term)}`;
   const res = await fetch(url, {
@@ -96,6 +110,14 @@ export async function GET(request) {
   }
 
   try {
+    const termLower = name.toLowerCase();
+    const matchedKnown = KNOWN_PLAYERS.filter((p) => {
+      if (p.name.toLowerCase() === termLower) return true;
+      if (p.name.toLowerCase().includes(termLower)) return true;
+      if (p.aliases?.some((a) => a === termLower || a.includes(termLower) || termLower.includes(a))) return true;
+      return false;
+    }).map(({ aliases, ...rest }) => rest);
+
     // 1. Try exact search term
     let players = await queryPesdb(name);
 
@@ -115,6 +137,13 @@ export async function GET(request) {
         players = await queryPesdb(word);
         if (players.length > 0) break;
       }
+    }
+
+    // Merge matched known players (prepend so exact known matches appear first, deduping by id)
+    if (matchedKnown.length > 0) {
+      const existingIds = new Set(players.map((p) => p.id));
+      const newKnown = matchedKnown.filter((p) => !existingIds.has(p.id));
+      players = [...newKnown, ...players];
     }
 
     // Optional: Cache newly found players to Supabase

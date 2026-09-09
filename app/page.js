@@ -188,7 +188,7 @@ export default function Home() {
           </svg>
           <p>
             <span className="text-amber-400 font-semibold">Rule reminder:</span> purchases lock the player from being{" "}
-            <strong>sold</strong> until the <em>following</em> season or after the following Transfer Window.
+            <strong>sold</strong> until the <em>following</em> season.
           </p>
         </div>
 
