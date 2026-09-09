@@ -69,7 +69,7 @@ export default function ScreenshotScanModal({
 
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, [isOpen, apiKey]);
+  }, [isOpen]);
 
   // Reset when closing
   function handleClose() {
