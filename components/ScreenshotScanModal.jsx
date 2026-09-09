@@ -300,11 +300,11 @@ export default function ScreenshotScanModal({
             <button
               onClick={() => setShowKeyInput((v) => !v)}
               className={`p-2 rounded-lg border text-xs font-medium transition-colors ${
-                showKeyInput || !apiKey
-                  ? "bg-amber-500/15 border-amber-500/40 text-amber-300"
+                showKeyInput
+                  ? "bg-blue-500/15 border-blue-500/40 text-blue-300"
                   : "bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-white"
               }`}
-              title="Configure Gemini API Key"
+              title="Gemini API Key Settings"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path
@@ -332,12 +332,12 @@ export default function ScreenshotScanModal({
           <div className="p-3 bg-neutral-950/80 border-b border-neutral-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
             <div className="flex-1 w-full">
               <label className="block text-neutral-400 mb-1">
-                Gemini API Key{" "}
-                <span className="text-neutral-500">(Leave blank to use server GEMINI_API_KEY from .env.local)</span>
+                Custom Gemini API Key{" "}
+                <span className="text-emerald-400 font-medium">(Default shared API key is active for everyone)</span>
               </label>
               <input
                 type="password"
-                placeholder="AIzaSy..."
+                placeholder="Leave blank to use shared key..."
                 value={apiKey}
                 onChange={(e) => handleSaveKey(e.target.value)}
                 className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-1.5 text-white font-mono focus:outline-none focus:border-blue-500 text-xs"

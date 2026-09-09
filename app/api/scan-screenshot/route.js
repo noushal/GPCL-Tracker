@@ -55,8 +55,8 @@ Return a valid JSON object matching this schema:
 }
 `;
 
-    // Candidate models to try in order of preference
-    const models = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"];
+    // Candidate models to try in order of preference (gemini-3.6-flash is recommended and active)
+    const models = ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-2.0-flash"];
     let lastError = null;
     let rawPurchases = null;
 
