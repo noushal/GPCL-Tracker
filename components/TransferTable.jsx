@@ -7,14 +7,13 @@ import CustomSelect from "@/components/CustomSelect";
 
 const PAGE_SIZE = 7;
 
-const SORT_OPTIONS = [
+const BASE_SORT_OPTIONS = [
   { value: "newest", label: "Newest First" },
   { value: "oldest", label: "Oldest First" },
   { value: "az", label: "Player (A-Z)" },
   { value: "za", label: "Player (Z-A)" },
   { value: "fee-desc", label: "Fee (High to Low)" },
   { value: "fee-asc", label: "Fee (Low to High)" },
-  { value: "duplicates", label: "Duplicate Values" },
 ];
 
 function EmptyState({ isDuplicateMode = false }) {
@@ -227,8 +226,24 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
 
   const isTeamSelected = teamFilter !== "All";
 
+  // Duplicate values view is restricted to logged-in users only
+  const sortOptions = useMemo(() => {
+    if (canEdit) {
+      return [...BASE_SORT_OPTIONS, { value: "duplicates", label: "Duplicate Values" }];
+    }
+    return BASE_SORT_OPTIONS;
+  }, [canEdit]);
+
+  // If user logs out or is not authed while in duplicates view, revert to newest
+  useEffect(() => {
+    if (!canEdit && sortMode === "duplicates") {
+      setSortMode("newest");
+    }
+  }, [canEdit, sortMode]);
+
   // Group logs by normalized player name across all transfers
   const playerStats = useMemo(() => {
+    if (!canEdit) return new Map();
     const map = new Map();
     logs.forEach((log) => {
       const key = (log.player || "").trim().toLowerCase();
@@ -241,10 +256,11 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
       if (log.team) entry.teams.add(log.team);
     });
     return map;
-  }, [logs]);
+  }, [logs, canEdit]);
 
   // Exact duplicate signature check (same player + same team + same season + same window)
   const exactDuplicateMap = useMemo(() => {
+    if (!canEdit) return new Map();
     const map = new Map();
     logs.forEach((log) => {
       const key = [
@@ -256,9 +272,10 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
       map.set(key, (map.get(key) || 0) + 1);
     });
     return map;
-  }, [logs]);
+  }, [logs, canEdit]);
 
   const getDuplicateInfo = (log) => {
+    if (!canEdit) return null;
     const key = (log.player || "").trim().toLowerCase();
     const stats = playerStats.get(key);
     const count = stats?.logs?.length || 0;
@@ -313,7 +330,7 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
       return matchesSearch && matchesTeam;
     });
 
-    if (sortMode === "duplicates") {
+    if (canEdit && sortMode === "duplicates") {
       filtered = filtered.filter((log) => {
         const key = (log.player || "").trim().toLowerCase();
         const stats = playerStats.get(key);
@@ -322,7 +339,7 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
     }
 
     return [...filtered].sort((a, b) => {
-      if (sortMode === "duplicates") {
+      if (canEdit && sortMode === "duplicates") {
         // Group identical players together alphabetically
         const nameComp = (a.player || "").localeCompare(b.player || "");
         if (nameComp !== 0) return nameComp;
@@ -345,13 +362,13 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
       }
       return 0;
     });
-  }, [logs, search, teamFilter, sortMode, playerStats]);
+  }, [logs, search, teamFilter, sortMode, playerStats, canEdit]);
 
   const uniqueDuplicatePlayersCount = useMemo(() => {
-    if (sortMode !== "duplicates") return 0;
+    if (!canEdit || sortMode !== "duplicates") return 0;
     const set = new Set(processedLogs.map((l) => (l.player || "").trim().toLowerCase()).filter(Boolean));
     return set.size;
-  }, [sortMode, processedLogs]);
+  }, [canEdit, sortMode, processedLogs]);
 
   // Pagination slicing — bypassed entirely in Full Team View
   const totalPages = isFullTeamView ? 1 : Math.ceil(processedLogs.length / PAGE_SIZE);
@@ -468,7 +485,7 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
             </button>
           )}
 
-          {sortMode === "duplicates" ? (
+          {canEdit && sortMode === "duplicates" ? (
             <span className="bg-amber-500/10 text-amber-300 text-xs px-3 py-1 rounded-full border border-amber-500/30 flex items-center gap-1.5 font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
               {processedLogs.length === 0
@@ -512,14 +529,14 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
             searchable
             searchPlaceholder="Search teams..."
           />
-          <CustomSelect value={sortMode} onChange={setSortMode} options={SORT_OPTIONS} className="flex-1 sm:w-52" />
+          <CustomSelect value={sortMode} onChange={setSortMode} options={sortOptions} className="flex-1 sm:w-52" />
         </div>
       </div>
 
       {/* ── Mobile: stacked cards ── */}
       <div className="md:hidden flex-1">
         {visibleLogs.length === 0 ? (
-          <EmptyState isDuplicateMode={sortMode === "duplicates"} />
+          <EmptyState isDuplicateMode={canEdit && sortMode === "duplicates"} />
         ) : (
           <div className="divide-y divide-neutral-700/50">
             {visibleLogs.map((log) => {
@@ -528,7 +545,7 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
                 <div
                   key={log.id}
                   className={`p-4 space-y-3 transition-colors ${
-                    sortMode === "duplicates"
+                    canEdit && sortMode === "duplicates"
                       ? dupInfo?.isExact
                         ? "bg-red-950/20 border-l-2 border-l-red-500"
                         : "bg-amber-950/15 border-l-2 border-l-amber-500"
@@ -611,7 +628,7 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
             {visibleLogs.length === 0 && (
               <tr>
                 <td colSpan={6}>
-                  <EmptyState isDuplicateMode={sortMode === "duplicates"} />
+                  <EmptyState isDuplicateMode={canEdit && sortMode === "duplicates"} />
                 </td>
               </tr>
             )}
@@ -621,7 +638,7 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
                 <tr
                   key={log.id}
                   className={`transition-colors ${
-                    sortMode === "duplicates"
+                    canEdit && sortMode === "duplicates"
                       ? dupInfo?.isExact
                         ? "bg-red-950/20 hover:bg-red-950/35 border-l-2 border-l-red-500"
                         : "bg-amber-950/15 hover:bg-amber-950/30 border-l-2 border-l-amber-500"
@@ -687,11 +704,11 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
       {isFullTeamView && processedLogs.length > 0 && (
         <div className="px-4 py-3 border-t border-neutral-700 text-xs text-center text-neutral-500">
           Showing all{" "}
-          <span className={sortMode === "duplicates" ? "text-amber-400 font-semibold" : "text-purple-400 font-semibold"}>
+          <span className={canEdit && sortMode === "duplicates" ? "text-amber-400 font-semibold" : "text-purple-400 font-semibold"}>
             {processedLogs.length}
           </span>{" "}
-          {sortMode === "duplicates" ? "duplicate records" : "records"} for{" "}
-          <span className={sortMode === "duplicates" ? "text-amber-400 font-semibold" : "text-purple-400 font-semibold"}>
+          {canEdit && sortMode === "duplicates" ? "duplicate records" : "records"} for{" "}
+          <span className={canEdit && sortMode === "duplicates" ? "text-amber-400 font-semibold" : "text-purple-400 font-semibold"}>
             {teamFilter}
           </span>
         </div>
