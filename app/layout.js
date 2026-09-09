@@ -1,6 +1,7 @@
 import { Inter } from "next/font/google";
 import "./globals.css";
 import UsernameGate from "@/components/UsernameGate";
+import AutoUpdateListener from "@/components/AutoUpdateListener";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -29,6 +30,7 @@ export default function RootLayout({ children }) {
       >
         {children}
         <UsernameGate />
+        <AutoUpdateListener />
       </body>
     </html>
   );
