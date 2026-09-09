@@ -34,10 +34,6 @@ export default function ScreenshotScanModal({
   const [purchases, setPurchases] = useState([]);
   const [selectedIndices, setSelectedIndices] = useState(new Set());
 
-  // API Key handling (stored in localStorage if not in server env)
-  const [apiKey, setApiKey] = useState("");
-  const [showKeyInput, setShowKeyInput] = useState(false);
-
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -51,20 +47,6 @@ export default function ScreenshotScanModal({
       processImageFile(initialFile);
     }
   }, [initialFile, isOpen]);
-
-  useEffect(() => {
-    try {
-      const savedKey = localStorage.getItem("gpcl_gemini_api_key");
-      if (savedKey) setApiKey(savedKey);
-    } catch {}
-  }, []);
-
-  function handleSaveKey(key) {
-    setApiKey(key);
-    try {
-      localStorage.setItem("gpcl_gemini_api_key", key.trim());
-    } catch {}
-  }
 
   // Handle global paste (Ctrl+V) when modal is open
   useEffect(() => {
@@ -130,17 +112,12 @@ export default function ScreenshotScanModal({
         body: JSON.stringify({
           imageBase64: dataUrl,
           mimeType,
-          clientApiKey: apiKey.trim() || undefined,
         }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        if (data?.error === "NO_API_KEY") {
-          setShowKeyInput(true);
-          throw new Error("Gemini API key is required to analyze screenshots. Please enter your API key below.");
-        }
         throw new Error(data?.message || "Failed to scan screenshot");
       }
 
@@ -296,63 +273,16 @@ export default function ScreenshotScanModal({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowKeyInput((v) => !v)}
-              className={`p-2 rounded-lg border text-xs font-medium transition-colors ${
-                showKeyInput
-                  ? "bg-blue-500/15 border-blue-500/40 text-blue-300"
-                  : "bg-neutral-800 border-neutral-700 text-neutral-400 hover:text-white"
-              }`}
-              title="Gemini API Key Settings"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
-                />
-              </svg>
-            </button>
-            <button
-              onClick={handleClose}
-              disabled={isScanning || isImporting}
-              className="text-neutral-400 hover:text-white p-2 rounded-lg hover:bg-neutral-800 transition-colors"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
+          <button
+            onClick={handleClose}
+            disabled={isScanning || isImporting}
+            className="text-neutral-400 hover:text-white p-2 rounded-lg hover:bg-neutral-800 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
         </div>
-
-        {/* ── API Key Banner / Settings (shown if requested or missing) ── */}
-        {showKeyInput && (
-          <div className="p-3 bg-neutral-950/80 border-b border-neutral-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-            <div className="flex-1 w-full">
-              <label className="block text-neutral-400 mb-1">
-                Custom Gemini API Key{" "}
-                <span className="text-emerald-400 font-medium">(Default shared API key is active for everyone)</span>
-              </label>
-              <input
-                type="password"
-                placeholder="Leave blank to use shared key..."
-                value={apiKey}
-                onChange={(e) => handleSaveKey(e.target.value)}
-                className="w-full bg-neutral-900 border border-neutral-700 rounded-lg px-3 py-1.5 text-white font-mono focus:outline-none focus:border-blue-500 text-xs"
-              />
-            </div>
-            <a
-              href="https://aistudio.google.com/app/apikey"
-              target="_blank"
-              rel="noreferrer"
-              className="text-blue-400 hover:underline shrink-0 flex items-center gap-1 self-end sm:self-center"
-            >
-              Get free key ↗
-            </a>
-          </div>
-        )}
 
         {/* ── Modal Body ── */}
         <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-5 custom-scrollbar">
