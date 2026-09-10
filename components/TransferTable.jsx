@@ -157,6 +157,23 @@ export function cleanSaleEligibility(str) {
   return str.replace(/\[trade.*?\]/g, "").trim();
 }
 
+export function formatTradeDetails(rawDetails) {
+  if (!rawDetails) return "";
+  let clean = String(rawDetails).trim();
+  // Strip "for <player>" or "for ..."
+  clean = clean.replace(/\s+for\s+.*$/i, "").trim();
+  if (
+    clean &&
+    !clean.toLowerCase().startsWith("traded with") &&
+    clean !== "Player Trade" &&
+    clean !== "Straight Swap (£0)"
+  ) {
+    clean = `Traded with ${clean}`;
+  }
+  if (clean === "Player Trade" || clean === "Straight Swap (£0)") return "";
+  return clean;
+}
+
 export function getTradeInfo(log, allLogs = []) {
   if (!log) return null;
 
@@ -167,7 +184,7 @@ export function getTradeInfo(log, allLogs = []) {
   ) {
     return {
       isTrade: true,
-      details: log.trade_details || "",
+      details: formatTradeDetails(log.trade_details),
     };
   }
 
@@ -176,11 +193,43 @@ export function getTradeInfo(log, allLogs = []) {
     const match = log.sale_eligibility.match(/\[trade:?(.*?)\]/);
     return {
       isTrade: true,
-      details: match ? match[1] : "",
+      details: formatTradeDetails(match ? match[1] : ""),
     };
   }
 
-  // 3. Fee is 0 (regular purchases have a strict minimum fee of £1,000,000)
+  // 3. Known historical trades where transfer_type wasn't stored in DB yet
+  const cleanPlayer = (log.player || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+  if (cleanPlayer.includes("gabriel magalha") && log.team?.includes("Santos")) {
+    return {
+      isTrade: true,
+      details: "Traded with Ajax (gradism)",
+    };
+  }
+  if (cleanPlayer.includes("onana") && log.team?.includes("Ajax")) {
+    return {
+      isTrade: true,
+      details: "Traded with Santos (JohnnyRainbow)",
+    };
+  }
+  if (cleanPlayer.includes("van de ven") && log.team?.includes("Ajax")) {
+    return {
+      isTrade: true,
+      details: "Traded with Santos (JohnnyRainbow)",
+    };
+  }
+  if (cleanPlayer === "malcom" && log.team?.includes("Santos")) {
+    return {
+      isTrade: true,
+      details: "Traded with Ajax (gradism)",
+    };
+  }
+
+  // 4. Fee is 0 (regular purchases have a strict minimum fee of £1,000,000)
   if (Number(log.fee) === 0) {
     if (allLogs && allLogs.length > 0) {
       const partner = allLogs.find(
@@ -189,19 +238,18 @@ export function getTradeInfo(log, allLogs = []) {
           other.purchase_date === log.purchase_date &&
           other.season === log.season &&
           other.transfer_window === log.transfer_window &&
-          Number(other.fee) === 0 &&
           other.team !== log.team
       );
       if (partner) {
         return {
           isTrade: true,
-          details: `Traded with ${partner.team} for ${partner.player}`,
+          details: `Traded with ${partner.team}`,
         };
       }
     }
     return {
       isTrade: true,
-      details: "Straight Swap (£0)",
+      details: "",
     };
   }
 
@@ -701,22 +749,15 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                                 </svg>
                                 <span>Player Trade</span>
-                                {Number(log.fee) === 0 ? (
-                                  <span className="text-neutral-500 font-normal">· Swap</span>
-                                ) : (
-                                  <span className="text-blue-300/70 font-normal">· +Cash</span>
-                                )}
                               </div>
-                              {tradeInfo.details &&
-                                tradeInfo.details !== "Player Trade" &&
-                                tradeInfo.details !== "Straight Swap (£0)" && (
-                                  <span
-                                    className="text-[10px] text-neutral-400 block truncate max-w-[180px]"
-                                    title={tradeInfo.details}
-                                  >
-                                    {tradeInfo.details}
-                                  </span>
-                                )}
+                              {tradeInfo.details && (
+                                <span
+                                  className="text-[10px] text-neutral-400 block truncate max-w-[180px]"
+                                  title={tradeInfo.details}
+                                >
+                                  {tradeInfo.details}
+                                </span>
+                              )}
                             </div>
                           );
                         }
@@ -819,22 +860,15 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                               </svg>
                               <span>Player Trade</span>
-                              {Number(log.fee) === 0 ? (
-                                <span className="text-neutral-500 font-normal">· Swap</span>
-                              ) : (
-                                <span className="text-blue-300/70 font-normal">· +Cash</span>
-                              )}
                             </div>
-                            {tradeInfo.details &&
-                              tradeInfo.details !== "Player Trade" &&
-                              tradeInfo.details !== "Straight Swap (£0)" && (
-                                <span
-                                  className="text-[10px] text-neutral-400 block truncate max-w-[220px]"
-                                  title={tradeInfo.details}
-                                >
-                                  {tradeInfo.details}
-                                </span>
-                              )}
+                            {tradeInfo.details && (
+                              <span
+                                className="text-[10px] text-neutral-400 block truncate max-w-[220px]"
+                                title={tradeInfo.details}
+                              >
+                                {tradeInfo.details}
+                              </span>
+                            )}
                           </div>
                         );
                       }
