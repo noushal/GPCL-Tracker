@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import PlayerAutocomplete from "@/components/PlayerAutocomplete";
 import CustomSelect from "@/components/CustomSelect";
@@ -37,6 +37,10 @@ const emptyTradeForm = {
 // Fields cleared after each successful purchase submission
 const RESET_PURCHASE_FIELDS = { player: "", playerId: null, fee: "" };
 
+const DRAFT_PURCHASE_KEY = "gpcl_draft_purchase";
+const DRAFT_TRADE_KEY = "gpcl_draft_trade";
+const DRAFT_MODE_KEY = "gpcl_draft_mode";
+
 export default function TransferForm({
   teams,
   editingLog,
@@ -55,6 +59,84 @@ export default function TransferForm({
   const [pastedFiles, setPastedFiles] = useState([]);
   const [showTradeScanModal, setShowTradeScanModal] = useState(false);
   const [pastedTradeFiles, setPastedTradeFiles] = useState([]);
+
+  const hasHydratedDraftsRef = useRef(false);
+  const isInitialMountRef = useRef(true);
+  const prevEditingLogRef = useRef(editingLog);
+
+  // Restore draft state from localStorage on client mount so reloads/refreshes never lose work
+  useEffect(() => {
+    try {
+      const savedMode = localStorage.getItem(DRAFT_MODE_KEY);
+      if (savedMode === "purchase" || savedMode === "trade") {
+        setMode(savedMode);
+      }
+
+      const savedPurchase = localStorage.getItem(DRAFT_PURCHASE_KEY);
+      if (savedPurchase) {
+        const parsed = JSON.parse(savedPurchase);
+        if (parsed && typeof parsed === "object") {
+          setForm((prev) => ({
+            ...prev,
+            team: parsed.team !== undefined ? parsed.team : prev.team,
+            player: parsed.player !== undefined ? parsed.player : prev.player,
+            playerId: parsed.playerId !== undefined ? parsed.playerId : prev.playerId,
+            fee: parsed.fee !== undefined ? parsed.fee : prev.fee,
+            season: parsed.season !== undefined ? parsed.season : prev.season,
+            window: parsed.window !== undefined ? parsed.window : prev.window,
+          }));
+        }
+      }
+
+      const savedTrade = localStorage.getItem(DRAFT_TRADE_KEY);
+      if (savedTrade) {
+        const parsed = JSON.parse(savedTrade);
+        if (parsed && typeof parsed === "object") {
+          setTradeForm((prev) => ({
+            ...prev,
+            teamA: parsed.teamA !== undefined ? parsed.teamA : prev.teamA,
+            playerA: parsed.playerA !== undefined ? parsed.playerA : prev.playerA,
+            playerIdA: parsed.playerIdA !== undefined ? parsed.playerIdA : prev.playerIdA,
+            teamB: parsed.teamB !== undefined ? parsed.teamB : prev.teamB,
+            playerB: parsed.playerB !== undefined ? parsed.playerB : prev.playerB,
+            playerIdB: parsed.playerIdB !== undefined ? parsed.playerIdB : prev.playerIdB,
+            season: parsed.season !== undefined ? parsed.season : prev.season,
+            window: parsed.window !== undefined ? parsed.window : prev.window,
+            cashPayer: parsed.cashPayer !== undefined ? parsed.cashPayer : prev.cashPayer,
+            cashAmount: parsed.cashAmount !== undefined ? parsed.cashAmount : prev.cashAmount,
+          }));
+        }
+      }
+    } catch {
+      // ignore storage errors
+    } finally {
+      hasHydratedDraftsRef.current = true;
+    }
+  }, []);
+
+  // Auto-save purchase draft
+  useEffect(() => {
+    if (!hasHydratedDraftsRef.current || editingLog) return;
+    try {
+      localStorage.setItem(DRAFT_PURCHASE_KEY, JSON.stringify(form));
+    } catch {}
+  }, [form, editingLog]);
+
+  // Auto-save trade draft
+  useEffect(() => {
+    if (!hasHydratedDraftsRef.current || editingLog) return;
+    try {
+      localStorage.setItem(DRAFT_TRADE_KEY, JSON.stringify(tradeForm));
+    } catch {}
+  }, [tradeForm, editingLog]);
+
+  // Auto-save active mode
+  useEffect(() => {
+    if (!hasHydratedDraftsRef.current || editingLog) return;
+    try {
+      localStorage.setItem(DRAFT_MODE_KEY, mode);
+    } catch {}
+  }, [mode, editingLog]);
 
   // Global paste handler on the page for logged in users (disabled when modal is open)
   useEffect(() => {
@@ -85,6 +167,24 @@ export default function TransferForm({
   }, [canEdit, editingLog, showScanModal, showTradeScanModal, mode]);
 
   useEffect(() => {
+    // Avoid clearing drafts on first render when editingLog is initially null
+    if (isInitialMountRef.current) {
+      isInitialMountRef.current = false;
+      if (editingLog) {
+        setMode("purchase");
+        setForm({
+          team: editingLog.team || "",
+          player: editingLog.player || "",
+          playerId: editingLog.player_id ?? null,
+          fee: editingLog.fee || "",
+          season: editingLog.season || "Season 2",
+          window: editingLog.transfer_window || WINDOWS[0],
+        });
+      }
+      prevEditingLogRef.current = editingLog;
+      return;
+    }
+
     if (editingLog) {
       setMode("purchase");
       setForm({
@@ -95,9 +195,25 @@ export default function TransferForm({
         season: editingLog.season || "Season 2",
         window: editingLog.transfer_window || WINDOWS[0],
       });
-    } else {
-      setForm((f) => ({ ...emptyForm, team: f.team, season: f.season, window: f.window }));
+    } else if (prevEditingLogRef.current && !editingLog) {
+      // User canceled or finished editing, restore unsubmitted draft if present
+      try {
+        const savedPurchase = localStorage.getItem(DRAFT_PURCHASE_KEY);
+        if (savedPurchase) {
+          const parsed = JSON.parse(savedPurchase);
+          if (parsed && typeof parsed === "object") {
+            setForm((prev) => ({ ...prev, ...parsed }));
+          } else {
+            setForm((f) => ({ ...emptyForm, team: f.team, season: f.season, window: f.window }));
+          }
+        } else {
+          setForm((f) => ({ ...emptyForm, team: f.team, season: f.season, window: f.window }));
+        }
+      } catch {
+        setForm((f) => ({ ...emptyForm, team: f.team, season: f.season, window: f.window }));
+      }
     }
+    prevEditingLogRef.current = editingLog;
   }, [editingLog]);
 
   function set(field, value) {
@@ -118,6 +234,38 @@ export default function TransferForm({
 
   const MIN_FEE = 1_000_000;
 
+  const hasDraft =
+    mode === "purchase"
+      ? Boolean(form.player?.trim() || form.fee)
+      : Boolean(tradeForm.playerA?.trim() || tradeForm.playerB?.trim() || tradeForm.cashAmount);
+
+  function handleClearDraft() {
+    if (mode === "purchase") {
+      const cleared = { ...form, ...RESET_PURCHASE_FIELDS };
+      setForm(cleared);
+      setFeeError("");
+      setError("");
+      try {
+        localStorage.setItem(DRAFT_PURCHASE_KEY, JSON.stringify(cleared));
+      } catch {}
+    } else {
+      const cleared = {
+        ...tradeForm,
+        playerA: "",
+        playerIdA: null,
+        playerB: "",
+        playerIdB: null,
+        cashPayer: "none",
+        cashAmount: "",
+      };
+      setTradeForm(cleared);
+      setError("");
+      try {
+        localStorage.setItem(DRAFT_TRADE_KEY, JSON.stringify(cleared));
+      } catch {}
+    }
+  }
+
   async function handlePurchaseSubmit(e) {
     e.preventDefault();
 
@@ -136,7 +284,11 @@ export default function TransferForm({
     }
     setError("");
     await onSubmit({ ...form, mode: "purchase" });
-    setForm((f) => ({ ...f, ...RESET_PURCHASE_FIELDS }));
+    const nextForm = { ...form, ...RESET_PURCHASE_FIELDS };
+    setForm(nextForm);
+    try {
+      localStorage.setItem(DRAFT_PURCHASE_KEY, JSON.stringify(nextForm));
+    } catch {}
   }
 
   async function handleTradeSubmit(e) {
@@ -177,15 +329,19 @@ export default function TransferForm({
     });
 
     // Reset players and cash amount, preserve selected clubs, season, and window
-    setTradeForm((f) => ({
-      ...f,
+    const nextTrade = {
+      ...tradeForm,
       playerA: "",
       playerIdA: null,
       playerB: "",
       playerIdB: null,
       cashPayer: "none",
       cashAmount: "",
-    }));
+    };
+    setTradeForm(nextTrade);
+    try {
+      localStorage.setItem(DRAFT_TRADE_KEY, JSON.stringify(nextTrade));
+    } catch {}
   }
 
   if (!canEdit) {
@@ -217,24 +373,37 @@ export default function TransferForm({
 
   return (
     <div className="lg:col-span-1 bg-neutral-800 rounded-2xl shadow-lg border border-neutral-700 p-5 sm:p-6 h-fit">
-      {/* Title */}
-      <h2 className="text-xl font-semibold mb-4 flex items-center gap-2">
-        {mode === "trade" && !editingLog ? (
-          <>
-            <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-            </svg>
-            Log Player Trade
-          </>
-        ) : (
-          <>
-            <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-            </svg>
-            {editingLog ? "Edit Transfer" : "Log New Purchase"}
-          </>
+      {/* Title & Clear Draft Action */}
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-semibold flex items-center gap-2">
+          {mode === "trade" && !editingLog ? (
+            <>
+              <svg className="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+              Log Player Trade
+            </>
+          ) : (
+            <>
+              <svg className="w-5 h-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+              </svg>
+              {editingLog ? "Edit Transfer" : "Log New Purchase"}
+            </>
+          )}
+        </h2>
+
+        {!editingLog && hasDraft && (
+          <button
+            type="button"
+            onClick={handleClearDraft}
+            className="text-xs text-neutral-400 hover:text-red-400 font-medium transition-colors px-2 py-1 rounded hover:bg-neutral-700/50 cursor-pointer"
+            title="Clear current draft inputs"
+          >
+            Clear Draft
+          </button>
         )}
-      </h2>
+      </div>
 
       {/* Mode Switcher */}
       {!editingLog && (
