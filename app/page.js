@@ -83,6 +83,8 @@ export default function Home() {
       const cashAmount = Number(form.cashAmount || 0);
 
       // Record 1: Club A receives Player B (given up by Club B)
+      const baseEligibilityA = calculateSaleEligibility(form.season, form.window);
+      const detailsA = `Traded with ${form.teamB} for ${form.playerA.trim()}`;
       const rowA = {
         team: form.teamA,
         player: form.playerB.trim(),
@@ -91,13 +93,15 @@ export default function Home() {
         season: form.season,
         transfer_window: form.window,
         purchase_date: new Date().toISOString().split("T")[0],
-        sale_eligibility: calculateSaleEligibility(form.season, form.window),
+        sale_eligibility: `${baseEligibilityA} [trade:${detailsA}]`,
         created_by: session?.user?.id ?? null,
         transfer_type: "trade",
-        trade_details: `Traded with ${form.teamB} for ${form.playerA.trim()}`,
+        trade_details: detailsA,
       };
 
       // Record 2: Club B receives Player A (given up by Club A)
+      const baseEligibilityB = calculateSaleEligibility(form.season, form.window);
+      const detailsB = `Traded with ${form.teamA} for ${form.playerB.trim()}`;
       const rowB = {
         team: form.teamB,
         player: form.playerA.trim(),
@@ -106,10 +110,10 @@ export default function Home() {
         season: form.season,
         transfer_window: form.window,
         purchase_date: new Date().toISOString().split("T")[0],
-        sale_eligibility: calculateSaleEligibility(form.season, form.window),
+        sale_eligibility: `${baseEligibilityB} [trade:${detailsB}]`,
         created_by: session?.user?.id ?? null,
         transfer_type: "trade",
-        trade_details: `Traded with ${form.teamA} for ${form.playerB.trim()}`,
+        trade_details: detailsB,
       };
 
       // 1. Try inserting with trade columns

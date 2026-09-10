@@ -141,6 +141,62 @@ function RowActions({ log, onEdit, onDelete }) {
   );
 }
 
+export function cleanSaleEligibility(str) {
+  if (!str) return "";
+  return str.replace(/\[trade.*?\]/g, "").trim();
+}
+
+export function getTradeInfo(log, allLogs = []) {
+  if (!log) return null;
+
+  // 1. Explicit transfer_type or trade_details
+  if (
+    log.transfer_type === "trade" ||
+    (log.trade_details && String(log.trade_details).trim().length > 0)
+  ) {
+    return {
+      isTrade: true,
+      details: log.trade_details || "",
+    };
+  }
+
+  // 2. Encoded in sale_eligibility: "[trade:...]"
+  if (typeof log.sale_eligibility === "string" && log.sale_eligibility.includes("[trade")) {
+    const match = log.sale_eligibility.match(/\[trade:?(.*?)\]/);
+    return {
+      isTrade: true,
+      details: match ? match[1] : "",
+    };
+  }
+
+  // 3. Fee is 0 (regular purchases have a strict minimum fee of £1,000,000)
+  if (Number(log.fee) === 0) {
+    if (allLogs && allLogs.length > 0) {
+      const partner = allLogs.find(
+        (other) =>
+          other.id !== log.id &&
+          other.purchase_date === log.purchase_date &&
+          other.season === log.season &&
+          other.transfer_window === log.transfer_window &&
+          Number(other.fee) === 0 &&
+          other.team !== log.team
+      );
+      if (partner) {
+        return {
+          isTrade: true,
+          details: `Traded with ${partner.team} for ${partner.player}`,
+        };
+      }
+    }
+    return {
+      isTrade: true,
+      details: "Straight Swap (£0)",
+    };
+  }
+
+  return null;
+}
+
 // ─── Pagination bar ──────────────────────────────────────────────────────────
 function Pagination({ currentPage, totalPages, onPageChange }) {
   if (totalPages <= 1) return null;
@@ -592,34 +648,44 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
                     </div>
                     <div>
                       <span className="block text-[11px] text-neutral-500 uppercase tracking-wide">
-                        {log.transfer_type === "trade" || log.trade_details ? "Type / Fee" : "Fee"}
+                        Fee
                       </span>
-                      {log.transfer_type === "trade" || log.trade_details ? (
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/30 flex items-center gap-1">
-                              <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                              </svg>
-                              Trade
-                            </span>
-                            {Number(log.fee) > 0 ? (
-                              <span className="text-emerald-400 font-semibold text-xs">
+                      {(() => {
+                        const tradeInfo = getTradeInfo(log, logs);
+                        if (tradeInfo) {
+                          return (
+                            <div className="space-y-0.5">
+                              <span className="text-emerald-400 font-semibold text-sm">
                                 {formatCurrency(log.fee)}
                               </span>
-                            ) : (
-                              <span className="text-neutral-400 text-xs">Swap (£0)</span>
-                            )}
-                          </div>
-                          {log.trade_details && (
-                            <span className="text-[10px] text-neutral-400 block truncate max-w-[170px]" title={log.trade_details}>
-                              {log.trade_details}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-emerald-400 font-semibold">{formatCurrency(log.fee)}</span>
-                      )}
+                              <div className="flex items-center gap-1 text-[10px] text-blue-400 font-medium">
+                                <svg className="w-3 h-3 text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                </svg>
+                                <span>Player Trade</span>
+                                {Number(log.fee) === 0 ? (
+                                  <span className="text-neutral-500 font-normal">· Swap</span>
+                                ) : (
+                                  <span className="text-blue-300/70 font-normal">· +Cash</span>
+                                )}
+                              </div>
+                              {tradeInfo.details &&
+                                tradeInfo.details !== "Player Trade" &&
+                                tradeInfo.details !== "Straight Swap (£0)" && (
+                                  <span
+                                    className="text-[10px] text-neutral-400 block truncate max-w-[180px]"
+                                    title={tradeInfo.details}
+                                  >
+                                    {tradeInfo.details}
+                                  </span>
+                                )}
+                            </div>
+                          );
+                        }
+                        return (
+                          <span className="text-emerald-400 font-semibold">{formatCurrency(log.fee)}</span>
+                        );
+                      })()}
                     </div>
                     <div>
                       <span className="block text-[11px] text-neutral-500 uppercase tracking-wide">Purchased In</span>
@@ -629,7 +695,7 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
                   </div>
 
                   <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-1 rounded-md text-xs font-semibold block w-fit">
-                    Locked till {log.sale_eligibility}
+                    Locked till {cleanSaleEligibility(log.sale_eligibility)}
                   </span>
                 </div>
               );
@@ -699,32 +765,42 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    {log.transfer_type === "trade" || log.trade_details ? (
-                      <div className="space-y-0.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/30 flex items-center gap-1">
-                            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
-                            </svg>
-                            Trade
-                          </span>
-                          {Number(log.fee) > 0 ? (
-                            <span className="text-emerald-400 font-semibold text-xs">
+                    {(() => {
+                      const tradeInfo = getTradeInfo(log, logs);
+                      if (tradeInfo) {
+                        return (
+                          <div className="space-y-0.5">
+                            <span className="text-emerald-400 font-semibold">
                               {formatCurrency(log.fee)}
                             </span>
-                          ) : (
-                            <span className="text-neutral-400 text-xs">Swap (£0)</span>
-                          )}
-                        </div>
-                        {log.trade_details && (
-                          <span className="text-[11px] text-neutral-400 block truncate max-w-[220px]" title={log.trade_details}>
-                            {log.trade_details}
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-emerald-400 font-semibold">{formatCurrency(log.fee)}</span>
-                    )}
+                            <div className="flex items-center gap-1 text-[11px] text-blue-400 font-medium">
+                              <svg className="w-3 h-3 text-blue-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                              </svg>
+                              <span>Player Trade</span>
+                              {Number(log.fee) === 0 ? (
+                                <span className="text-neutral-500 font-normal">· Swap</span>
+                              ) : (
+                                <span className="text-blue-300/70 font-normal">· +Cash</span>
+                              )}
+                            </div>
+                            {tradeInfo.details &&
+                              tradeInfo.details !== "Player Trade" &&
+                              tradeInfo.details !== "Straight Swap (£0)" && (
+                                <span
+                                  className="text-[10px] text-neutral-400 block truncate max-w-[220px]"
+                                  title={tradeInfo.details}
+                                >
+                                  {tradeInfo.details}
+                                </span>
+                              )}
+                          </div>
+                        );
+                      }
+                      return (
+                        <span className="text-emerald-400 font-semibold">{formatCurrency(log.fee)}</span>
+                      );
+                    })()}
                   </td>
                   <td className="px-6 py-4">
                     <span className="block text-white">{log.season}</span>
@@ -732,7 +808,7 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
                   </td>
                   <td className="px-6 py-4">
                     <span className="bg-red-500/10 text-red-400 border border-red-500/20 px-2.5 py-1 rounded-md text-xs font-semibold block w-fit">
-                      Locked till {log.sale_eligibility}
+                      Locked till {cleanSaleEligibility(log.sale_eligibility)}
                     </span>
                   </td>
                   <td className="px-6 py-4 text-right space-x-1">
