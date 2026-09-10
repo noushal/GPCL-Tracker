@@ -5,6 +5,7 @@ import Link from "next/link";
 import PlayerAutocomplete from "@/components/PlayerAutocomplete";
 import CustomSelect from "@/components/CustomSelect";
 import ScreenshotScanModal from "@/components/ScreenshotScanModal";
+import TradeScanModal from "@/components/TradeScanModal";
 
 const SEASONS = Array.from({ length: 8 }, (_, i) => `Season ${i + 1}`);
 const WINDOWS = ["Summer Transfer (Pre-Season)", "Winter Transfer"];
@@ -52,10 +53,12 @@ export default function TransferForm({
   const [feeError, setFeeError] = useState("");
   const [showScanModal, setShowScanModal] = useState(false);
   const [pastedFiles, setPastedFiles] = useState([]);
+  const [showTradeScanModal, setShowTradeScanModal] = useState(false);
+  const [pastedTradeFiles, setPastedTradeFiles] = useState([]);
 
   // Global paste handler on the page for logged in users (disabled when modal is open)
   useEffect(() => {
-    if (!canEdit || editingLog || showScanModal) return;
+    if (!canEdit || editingLog || showScanModal || showTradeScanModal) return;
     function handlePaste(e) {
       const items = e.clipboardData?.items;
       if (!items) return;
@@ -68,13 +71,18 @@ export default function TransferForm({
       }
       if (files.length > 0) {
         e.preventDefault();
-        setPastedFiles(files);
-        setShowScanModal(true);
+        if (mode === "trade") {
+          setPastedTradeFiles(files);
+          setShowTradeScanModal(true);
+        } else {
+          setPastedFiles(files);
+          setShowScanModal(true);
+        }
       }
     }
     window.addEventListener("paste", handlePaste);
     return () => window.removeEventListener("paste", handlePaste);
-  }, [canEdit, editingLog, showScanModal]);
+  }, [canEdit, editingLog, showScanModal, showTradeScanModal, mode]);
 
   useEffect(() => {
     if (editingLog) {
@@ -421,7 +429,33 @@ export default function TransferForm({
         </>
       ) : (
         /* ── MODE 2: PLAYER TRADE FORM ── */
-        <form onSubmit={handleTradeSubmit} noValidate className="space-y-4">
+        <>
+          {!editingLog && (
+            <button
+              type="button"
+              onClick={() => {
+                setPastedTradeFiles([]);
+                setShowTradeScanModal(true);
+              }}
+              className="w-full mb-4 py-2.5 px-3 rounded-xl border border-blue-500/40 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm group"
+            >
+              <svg className="w-4 h-4 transition-transform group-hover:scale-110" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+                />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span>Scan Trade from Screenshot</span>
+              <span className="text-[10px] bg-blue-500/20 text-blue-300 px-1.5 py-0.5 rounded font-mono">
+                Ctrl+V
+              </span>
+            </button>
+          )}
+
+          <form onSubmit={handleTradeSubmit} noValidate className="space-y-4">
           {/* Shared Season & Window */}
           <div className="grid grid-cols-2 gap-3 bg-neutral-900/50 p-3 rounded-xl border border-neutral-700/60">
             <div>
@@ -611,6 +645,7 @@ export default function TransferForm({
             Log Player Trade
           </button>
         </form>
+        </>
       )}
 
       {/* Screenshot Scan Modal (for purchases) */}
@@ -631,6 +666,40 @@ export default function TransferForm({
         initialFiles={pastedFiles}
         onSuccess={() => {
           if (onBatchSuccess) onBatchSuccess();
+        }}
+      />
+
+      {/* Screenshot Scan Modal (for trades) */}
+      <TradeScanModal
+        isOpen={showTradeScanModal}
+        onClose={() => {
+          setShowTradeScanModal(false);
+          setPastedTradeFiles([]);
+        }}
+        onClearInitialFiles={() => {
+          setPastedTradeFiles([]);
+        }}
+        teams={teams}
+        defaultSeason={tradeForm.season}
+        defaultWindow={tradeForm.window}
+        initialFiles={pastedTradeFiles}
+        onApplyTrade={(scanned) => {
+          setTradeForm((prev) => ({
+            ...prev,
+            season: scanned.season || prev.season,
+            window: scanned.window || prev.window,
+            teamA: scanned.teamA || prev.teamA,
+            playerA: scanned.playerA || prev.playerA,
+            playerIdA: scanned.playerIdA ?? null,
+            teamB: scanned.teamB || prev.teamB,
+            playerB: scanned.playerB || prev.playerB,
+            playerIdB: scanned.playerIdB ?? null,
+            cashPayer: scanned.cashPayer || "none",
+            cashAmount: scanned.cashAmount !== undefined ? String(scanned.cashAmount) : "",
+          }));
+        }}
+        onSubmitDirect={async (scannedTrade) => {
+          await onSubmit(scannedTrade);
         }}
       />
     </div>
