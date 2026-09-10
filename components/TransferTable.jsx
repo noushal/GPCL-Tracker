@@ -13,10 +13,11 @@ const BASE_SORT_OPTIONS = [
   { value: "az", label: "Player (A-Z)" },
   { value: "za", label: "Player (Z-A)" },
   { value: "fee-desc", label: "Fee (High to Low)" },
-  { value: "fee-asc", label: "Fee (Low to High)" },
+  { value: "fee-asc", label: "Fee (Low to High, ≥ £1M)" },
+  { value: "trades", label: "Player Trades" },
 ];
 
-function EmptyState({ isDuplicateMode = false }) {
+function EmptyState({ isDuplicateMode = false, isTradeMode = false }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-12 text-center text-neutral-500">
       {isDuplicateMode ? (
@@ -28,6 +29,16 @@ function EmptyState({ isDuplicateMode = false }) {
           </div>
           <p className="text-neutral-200 font-medium">No duplicate transfers found</p>
           <p className="text-xs text-neutral-500 mt-1">All player transfer records are unique.</p>
+        </>
+      ) : isTradeMode ? (
+        <>
+          <div className="w-12 h-12 mb-3 rounded-full bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400">
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+          </div>
+          <p className="text-neutral-200 font-medium">No player trades found</p>
+          <p className="text-xs text-neutral-500 mt-1">No player trade records match your filter.</p>
         </>
       ) : (
         <>
@@ -386,6 +397,16 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
       return matchesSearch && matchesTeam;
     });
 
+    // When sorting Fee Low to High, exclude £0 transfers and only show transfers >= £1M
+    if (sortMode === "fee-asc") {
+      filtered = filtered.filter((log) => (Number(log.fee) || 0) >= 1_000_000);
+    }
+
+    // Filter to only Player Trades
+    if (sortMode === "trades") {
+      filtered = filtered.filter((log) => Boolean(getTradeInfo(log, logs)));
+    }
+
     if (canEdit && sortMode === "duplicates") {
       filtered = filtered.filter((log) => {
         const key = (log.player || "").trim().toLowerCase();
@@ -395,6 +416,12 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
     }
 
     return [...filtered].sort((a, b) => {
+      if (sortMode === "trades") {
+        const dateA = new Date(a.created_at || a.purchase_date || 0).getTime();
+        const dateB = new Date(b.created_at || b.purchase_date || 0).getTime();
+        if (dateB !== dateA) return dateB - dateA;
+        return (a.player || "").localeCompare(b.player || "");
+      }
       if (canEdit && sortMode === "duplicates") {
         // Group identical players together alphabetically
         const nameComp = (a.player || "").localeCompare(b.player || "");
@@ -549,6 +576,14 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
                 : `${processedLogs.length} Duplicate ${processedLogs.length === 1 ? "Record" : "Records"} (${uniqueDuplicatePlayersCount} ${uniqueDuplicatePlayersCount === 1 ? "player" : "players"})`}
               {isFullTeamView && " — Full View"}
             </span>
+          ) : sortMode === "trades" ? (
+            <span className="bg-blue-500/10 text-blue-300 text-xs px-3 py-1 rounded-full border border-blue-500/30 flex items-center gap-1.5 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+              {processedLogs.length === 0
+                ? "0 Player Trades Found"
+                : `${processedLogs.length} Player ${processedLogs.length === 1 ? "Trade" : "Trades"}`}
+              {isFullTeamView && " — Full View"}
+            </span>
           ) : (
             <span className="bg-neutral-900 text-neutral-400 text-xs px-3 py-1 rounded-full border border-neutral-700">
               {isFullTeamView
@@ -592,7 +627,10 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
       {/* ── Mobile: stacked cards ── */}
       <div className="md:hidden flex-1">
         {visibleLogs.length === 0 ? (
-          <EmptyState isDuplicateMode={canEdit && sortMode === "duplicates"} />
+          <EmptyState
+            isDuplicateMode={canEdit && sortMode === "duplicates"}
+            isTradeMode={sortMode === "trades"}
+          />
         ) : (
           <div className="divide-y divide-neutral-700/50">
             {visibleLogs.map((log) => {
@@ -721,7 +759,10 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
             {visibleLogs.length === 0 && (
               <tr>
                 <td colSpan={6}>
-                  <EmptyState isDuplicateMode={canEdit && sortMode === "duplicates"} />
+                  <EmptyState
+                    isDuplicateMode={canEdit && sortMode === "duplicates"}
+                    isTradeMode={sortMode === "trades"}
+                  />
                 </td>
               </tr>
             )}
