@@ -78,6 +78,85 @@ export default function Home() {
     const supabase = createClient();
     if (!supabase) return;
 
+    // Handle Player Trade submission (two-sided swap)
+    if (form.mode === "trade") {
+      const cashAmount = Number(form.cashAmount || 0);
+
+      // Record 1: Club A receives Player B (given up by Club B)
+      const rowA = {
+        team: form.teamA,
+        player: form.playerB.trim(),
+        player_id: form.playerIdB ?? null,
+        fee: form.cashPayer === "teamA" ? cashAmount : 0,
+        season: form.season,
+        transfer_window: form.window,
+        purchase_date: new Date().toISOString().split("T")[0],
+        sale_eligibility: calculateSaleEligibility(form.season, form.window),
+        created_by: session?.user?.id ?? null,
+        transfer_type: "trade",
+        trade_details: `Traded with ${form.teamB} for ${form.playerA.trim()}`,
+      };
+
+      // Record 2: Club B receives Player A (given up by Club A)
+      const rowB = {
+        team: form.teamB,
+        player: form.playerA.trim(),
+        player_id: form.playerIdA ?? null,
+        fee: form.cashPayer === "teamB" ? cashAmount : 0,
+        season: form.season,
+        transfer_window: form.window,
+        purchase_date: new Date().toISOString().split("T")[0],
+        sale_eligibility: calculateSaleEligibility(form.season, form.window),
+        created_by: session?.user?.id ?? null,
+        transfer_type: "trade",
+        trade_details: `Traded with ${form.teamA} for ${form.playerB.trim()}`,
+      };
+
+      // 1. Try inserting with trade columns
+      let { error } = await supabase.from("transfer_logs").insert([rowA, rowB]);
+
+      // 2. Fallback if transfer_type or trade_details columns do not exist in DB yet
+      if (
+        error &&
+        (error.message?.includes("transfer_type") ||
+          error.message?.includes("trade_details") ||
+          error.message?.includes("column"))
+      ) {
+        const stripTradeCols = (row) => {
+          const c = { ...row };
+          delete c.transfer_type;
+          delete c.trade_details;
+          return c;
+        };
+        const fallbackRes = await supabase
+          .from("transfer_logs")
+          .insert([stripTradeCols(rowA), stripTradeCols(rowB)]);
+        error = fallbackRes.error;
+      }
+
+      // 3. Fallback if player_id constraint fails
+      if (error && error.message?.includes("player_id")) {
+        const stripPlayerId = (row) => {
+          const c = { ...row, player_id: null };
+          delete c.transfer_type;
+          delete c.trade_details;
+          return c;
+        };
+        const fallbackRes = await supabase
+          .from("transfer_logs")
+          .insert([stripPlayerId(rowA), stripPlayerId(rowB)]);
+        error = fallbackRes.error;
+      }
+
+      if (error) {
+        showError(error.message);
+        return;
+      }
+
+      refreshAll();
+      return;
+    }
+
     // Server-side guard — mirrors client validation; rejects below-minimum fees
     // even if the client-side check is bypassed.
     const feeValue = form.fee === "" ? 0 : Number(form.fee);

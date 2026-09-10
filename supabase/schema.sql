@@ -38,9 +38,14 @@ create table transfer_logs (
   transfer_window text not null,
   purchase_date date not null,
   sale_eligibility text,
+  transfer_type text default 'purchase',
+  trade_details text,
   created_by uuid references profiles(id) on delete set null,
   created_at timestamptz default now()
 );
+-- Run in Supabase SQL editor if transfer_logs table already exists:
+-- ALTER TABLE transfer_logs ADD COLUMN IF NOT EXISTS transfer_type text DEFAULT 'purchase';
+-- ALTER TABLE transfer_logs ADD COLUMN IF NOT EXISTS trade_details text;
 
 -- Tamper-resistant audit trail: every insert/update/delete on teams and
 -- transfer_logs is recorded automatically by a DB trigger (not the client),

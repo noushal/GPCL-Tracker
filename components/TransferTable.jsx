@@ -591,8 +591,35 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
                       </span>
                     </div>
                     <div>
-                      <span className="block text-[11px] text-neutral-500 uppercase tracking-wide">Fee</span>
-                      <span className="text-emerald-400 font-semibold">{formatCurrency(log.fee)}</span>
+                      <span className="block text-[11px] text-neutral-500 uppercase tracking-wide">
+                        {log.transfer_type === "trade" || log.trade_details ? "Type / Fee" : "Fee"}
+                      </span>
+                      {log.transfer_type === "trade" || log.trade_details ? (
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/30 flex items-center gap-1">
+                              <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                              </svg>
+                              Trade
+                            </span>
+                            {Number(log.fee) > 0 ? (
+                              <span className="text-emerald-400 font-semibold text-xs">
+                                {formatCurrency(log.fee)}
+                              </span>
+                            ) : (
+                              <span className="text-neutral-400 text-xs">Swap (£0)</span>
+                            )}
+                          </div>
+                          {log.trade_details && (
+                            <span className="text-[10px] text-neutral-400 block truncate max-w-[170px]" title={log.trade_details}>
+                              {log.trade_details}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-emerald-400 font-semibold">{formatCurrency(log.fee)}</span>
+                      )}
                     </div>
                     <div>
                       <span className="block text-[11px] text-neutral-500 uppercase tracking-wide">Purchased In</span>
@@ -671,7 +698,34 @@ export default function TransferTable({ logs, teams, onEdit, onDelete, canEdit }
                       </span>
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-emerald-400 font-semibold">{formatCurrency(log.fee)}</td>
+                  <td className="px-6 py-4">
+                    {log.transfer_type === "trade" || log.trade_details ? (
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/30 flex items-center gap-1">
+                            <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                            </svg>
+                            Trade
+                          </span>
+                          {Number(log.fee) > 0 ? (
+                            <span className="text-emerald-400 font-semibold text-xs">
+                              {formatCurrency(log.fee)}
+                            </span>
+                          ) : (
+                            <span className="text-neutral-400 text-xs">Swap (£0)</span>
+                          )}
+                        </div>
+                        {log.trade_details && (
+                          <span className="text-[11px] text-neutral-400 block truncate max-w-[220px]" title={log.trade_details}>
+                            {log.trade_details}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-emerald-400 font-semibold">{formatCurrency(log.fee)}</span>
+                    )}
+                  </td>
                   <td className="px-6 py-4">
                     <span className="block text-white">{log.season}</span>
                     <span className="text-xs text-neutral-400">{log.transfer_window}</span>

@@ -20,7 +20,13 @@ function dedupeByNameAndNationality(rows) {
   return [...seen.values()];
 }
 
-export default function PlayerAutocomplete({ value, onChange, onSelectPlayer, className }) {
+export default function PlayerAutocomplete({
+  value,
+  onChange,
+  onSelectPlayer,
+  className,
+  placeholder = "e.g. Luka Modric",
+}) {
   const [results, setResults] = useState([]);
   const [open, setOpen] = useState(false);
   const boxRef = useRef(null);
@@ -105,7 +111,7 @@ export default function PlayerAutocomplete({ value, onChange, onSelectPlayer, cl
       <input
         type="text"
         value={value}
-        placeholder="e.g. Luka Modric"
+        placeholder={placeholder}
         onKeyDown={(e) => {
           if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key >= "0" && e.key <= "9") {
             e.preventDefault();
