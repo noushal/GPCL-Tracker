@@ -13,7 +13,7 @@ const BASE_SORT_OPTIONS = [
   { value: "az", label: "Player (A-Z)" },
   { value: "za", label: "Player (Z-A)" },
   { value: "fee-desc", label: "Fee (High to Low)" },
-  { value: "fee-asc", label: "Fee (Low to High, ≥ £1M)" },
+  { value: "fee-asc", label: "Fee (Low to High)" },
   { value: "trades", label: "Player Trades" },
 ];
 
