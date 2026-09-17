@@ -41,10 +41,9 @@ Return a valid JSON object matching this schema:
 async function scanSingleImage(cleanBase64, mimeType, apiKey) {
   // Candidate models to try in order of preference
   const models = [
-    "gemini-3.6-flash",
-    "gemini-3.5-flash-lite",
-    "gemini-3.5-flash",
-    "gemini-flash-latest",
+    "gemini-2.0-flash",
+    "gemini-2.5-flash",
+    "gemini-1.5-flash",
   ];
   let lastError = null;
 
