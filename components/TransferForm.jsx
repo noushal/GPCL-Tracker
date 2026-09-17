@@ -43,6 +43,7 @@ const DRAFT_MODE_KEY = "gpcl_draft_mode";
 
 export default function TransferForm({
   teams,
+  logs = [],
   editingLog,
   onSubmit,
   onCancelEdit,
@@ -849,6 +850,7 @@ export default function TransferForm({
           setPastedTradeFiles([]);
         }}
         teams={teams}
+        logs={logs}
         defaultSeason={tradeForm.season}
         defaultWindow={tradeForm.window}
         initialFiles={pastedTradeFiles}

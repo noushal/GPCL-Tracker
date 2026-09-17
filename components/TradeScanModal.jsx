@@ -59,6 +59,7 @@ export default function TradeScanModal({
   isOpen,
   onClose,
   teams = [],
+  logs = [],
   defaultSeason = "Season 2",
   defaultWindow = WINDOWS[0],
   initialFiles = [],
@@ -71,6 +72,7 @@ export default function TradeScanModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [detectedRaw, setDetectedRaw] = useState(null);
+  const [duplicateWarning, setDuplicateWarning] = useState(null); // null | { matches: [], message: string }
 
   const [tradeData, setTradeData] = useState({
     season: defaultSeason,
@@ -162,11 +164,76 @@ export default function TradeScanModal({
     }
   }
 
+  // Check parsed trade data against existing logs for duplicates
+  function checkForDuplicates(parsedTrade, existingLogs) {
+    if (!existingLogs || existingLogs.length === 0) return null;
+    if (!parsedTrade.playerA && !parsedTrade.playerB) return null;
+
+    const normalise = (s) => (s || "").trim().toLowerCase();
+    const season = normalise(parsedTrade.season);
+    const window = normalise(parsedTrade.window);
+    const pA = normalise(parsedTrade.playerA);
+    const pB = normalise(parsedTrade.playerB);
+    const tA = normalise(parsedTrade.teamA);
+    const tB = normalise(parsedTrade.teamB);
+
+    const exactMatches = [];
+    const playerMatches = [];
+
+    existingLogs.forEach((log) => {
+      const logPlayer = normalise(log.player);
+      const logTeam = normalise(log.team);
+      const logSeason = normalise(log.season);
+      const logWindow = normalise(log.transfer_window);
+
+      // Exact duplicate: same player, same team, same season, same window
+      const isExactA =
+        pA && tB && logPlayer === pA && logTeam === tB &&
+        logSeason === season && logWindow === window;
+      const isExactB =
+        pB && tA && logPlayer === pB && logTeam === tA &&
+        logSeason === season && logWindow === window;
+
+      if (isExactA || isExactB) {
+        exactMatches.push(log);
+        return;
+      }
+
+      // Soft match: same player name appears anywhere this season/window
+      const matchesPlayerA = pA && logPlayer === pA && logSeason === season && logWindow === window;
+      const matchesPlayerB = pB && logPlayer === pB && logSeason === season && logWindow === window;
+      if (matchesPlayerA || matchesPlayerB) {
+        playerMatches.push(log);
+      }
+    });
+
+    if (exactMatches.length > 0) {
+      const names = [...new Set(exactMatches.map((l) => l.player))].join(", ");
+      return {
+        type: "exact",
+        matches: exactMatches,
+        message: `Exact duplicate detected: ${names} ${exactMatches.length === 1 ? "has" : "have"} already been logged for this trade this season/window.`,
+      };
+    }
+
+    if (playerMatches.length > 0) {
+      const names = [...new Set(playerMatches.map((l) => l.player))].join(", ");
+      return {
+        type: "soft",
+        matches: playerMatches,
+        message: `Possible duplicate: ${names} ${playerMatches.length === 1 ? "has" : "have"} already been logged this season/window.`,
+      };
+    }
+
+    return null;
+  }
+
   async function scanTradeScreenshot(imgObj) {
     if (!imgObj?.dataUrl) return;
 
     setIsScanning(true);
     setError("");
+    setDuplicateWarning(null);
 
     try {
       const res = await fetch("/api/scan-trade", {
@@ -190,15 +257,22 @@ export default function TradeScanModal({
       const matchedA = matchTeamToClub(trade.userA, teams);
       const matchedB = matchTeamToClub(trade.userB, teams);
 
-      setTradeData((prev) => ({
-        ...prev,
-        teamA: matchedA || prev.teamA,
-        playerA: trade.playerA || prev.playerA,
-        teamB: matchedB || prev.teamB,
-        playerB: trade.playerB || prev.playerB,
+      const updatedTrade = {
+        season: tradeData.season,
+        window: tradeData.window,
+        teamA: matchedA || tradeData.teamA,
+        playerA: trade.playerA || tradeData.playerA,
+        teamB: matchedB || tradeData.teamB,
+        playerB: trade.playerB || tradeData.playerB,
         cashPayer: trade.cashPayer || "none",
         cashAmount: trade.cashAmount ? String(trade.cashAmount) : "",
-      }));
+      };
+
+      setTradeData((prev) => ({ ...prev, ...updatedTrade }));
+
+      // Check for duplicates against existing logs
+      const dupWarning = checkForDuplicates(updatedTrade, logs);
+      setDuplicateWarning(dupWarning);
     } catch (err) {
       setError(err.message || "Failed to analyze trade screenshot");
     } finally {
@@ -224,6 +298,7 @@ export default function TradeScanModal({
     setImage(null);
     setDetectedRaw(null);
     setError("");
+    setDuplicateWarning(null);
     onClose();
   }
 
@@ -647,6 +722,58 @@ export default function TradeScanModal({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Duplicate Warning Banner */}
+          {duplicateWarning && !isScanning && (
+            <div
+              className={`p-3 rounded-xl text-xs flex items-start gap-2.5 border ${
+                duplicateWarning.type === "exact"
+                  ? "bg-red-950/50 border-red-700/60 text-red-200"
+                  : "bg-amber-950/50 border-amber-600/50 text-amber-200"
+              }`}
+            >
+              <svg
+                className={`w-4 h-4 shrink-0 mt-0.5 ${
+                  duplicateWarning.type === "exact" ? "text-red-400" : "text-amber-400"
+                }`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                {duplicateWarning.type === "exact" ? (
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                ) : (
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="2"
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                )}
+              </svg>
+              <div className="flex-1">
+                <p className="font-semibold mb-0.5">
+                  {duplicateWarning.type === "exact" ? "⚠ Exact Duplicate Detected" : "⚠ Possible Duplicate"}
+                </p>
+                <p className="opacity-90">{duplicateWarning.message}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDuplicateWarning(null)}
+                className="text-neutral-400 hover:text-white transition-colors shrink-0 mt-0.5"
+                title="Dismiss"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
           )}
 
