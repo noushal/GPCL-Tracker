@@ -38,11 +38,12 @@ Return a valid JSON object matching this exact schema:
 
 async function scanTradeImage(cleanBase64, mimeType, apiKey) {
   const models = [
-    "gemini-2.0-flash-lite",
     "gemini-2.0-flash",
-    "gemini-1.5-flash-latest",
+    "gemini-1.5-flash-8b",
+    "gemini-1.5-flash",
+    "gemini-flash-latest",
   ];
-  let lastError = null;
+  const errors = [];
 
   for (const model of models) {
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -91,15 +92,16 @@ async function scanTradeImage(cleanBase64, mimeType, apiKey) {
         const parsed = JSON.parse(text);
         return parsed;
       } catch (err) {
-        lastError = err;
-        if (!err.message?.includes("503") && !err.message?.includes("demand")) {
-          break;
-        }
+        console.error(`[scan-trade] Model ${model} attempt ${attempt + 1} failed:`, err.message);
+        errors.push(`${model}: ${err.message}`);
+        // Always break inner loop and try next model
+        break;
       }
     }
   }
 
-  throw lastError || new Error("Failed to analyze trade screenshot");
+  const summary = errors.join(" | ");
+  throw new Error(`All models failed. ${summary}`);
 }
 
 export async function POST(req) {
