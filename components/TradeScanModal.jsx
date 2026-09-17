@@ -487,8 +487,12 @@ export default function TradeScanModal({
                           <span className="w-2 h-2 rounded-full bg-blue-400 animate-ping"></span>
                           Analyzing with Gemini Vision...
                         </span>
-                      ) : (
+                      ) : error ? (
+                        <span className="text-red-400">Failed to parse — check error below</span>
+                      ) : detectedRaw ? (
                         <span className="text-emerald-400">Trade parsed successfully</span>
+                      ) : (
+                        <span className="text-neutral-400">Ready to scan</span>
                       )}
                     </p>
                   </div>

@@ -38,9 +38,9 @@ Return a valid JSON object matching this exact schema:
 
 async function scanTradeImage(cleanBase64, mimeType, apiKey) {
   const models = [
+    "gemini-2.0-flash-lite",
     "gemini-2.0-flash",
-    "gemini-2.5-flash",
-    "gemini-1.5-flash",
+    "gemini-1.5-flash-latest",
   ];
   let lastError = null;
 
