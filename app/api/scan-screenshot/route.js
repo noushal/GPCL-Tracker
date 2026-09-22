@@ -18,6 +18,10 @@ The table columns are typically:
 DATE | DESCRIPTION | CREDIT | DEBT | BALANCE
 
 CRITICAL EXTRACTION RULES:
+0. DETECT ACCOUNT OWNER:
+   - Look at the top of the screenshot for a username, club name, account name, or profile name.
+   - This is typically shown as a header, title, or profile section (e.g. "ethanHunt91", "Manchester City", "Santos FC").
+   - Return ONLY the raw username or club name exactly as it appears. If not found, return null.
 1. FILTER FOR DEBT ONLY: Extract ONLY rows where the transaction is a debit (purchase). DEBT must be GREATER THAN OR EQUAL TO 1,000,000 (1 million).
 2. STRICT EXCLUSIONS:
    - Rows where DEBT is 0 or 0,00 (for example, rows with credit amounts or refunds like "David da Costa" must be completely omitted).
@@ -32,6 +36,7 @@ CRITICAL EXTRACTION RULES:
 
 Return a valid JSON object matching this schema:
 {
+  "detectedUser": "username or club name from the screenshot header, or null",
   "purchases": [
     {
       "date": "YYYY-MM-DD",
@@ -65,7 +70,9 @@ async function scanSingleImage(cleanBase64, mimeType, apiKey) {
   // Strip markdown code fences if the model wrapped the JSON
   const cleaned = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
   const parsed = JSON.parse(cleaned);
-  return Array.isArray(parsed) ? parsed : parsed.purchases || [];
+  const purchases = Array.isArray(parsed) ? parsed : parsed.purchases || [];
+  const detectedUser = parsed.detectedUser || null;
+  return { purchases, detectedUser };
 }
 
 export async function POST(req) {
@@ -115,9 +122,14 @@ export async function POST(req) {
 
     const rawPurchases = [];
     const errors = [];
+    let detectedUser = null;
     settled.forEach((res, i) => {
       if (res.status === "fulfilled") {
-        rawPurchases.push(...res.value);
+        rawPurchases.push(...res.value.purchases);
+        // Use the first detected user found across all images
+        if (!detectedUser && res.value.detectedUser) {
+          detectedUser = res.value.detectedUser;
+        }
       } else {
         errors.push(`Image #${i + 1}: ${res.reason?.message || "Failed to analyze"}`);
       }
@@ -158,7 +170,7 @@ export async function POST(req) {
         };
       });
 
-    return NextResponse.json({ purchases });
+    return NextResponse.json({ purchases, detectedUser });
   } catch (err) {
     return NextResponse.json({ error: "INTERNAL_ERROR", message: err.message }, { status: 500 });
   }

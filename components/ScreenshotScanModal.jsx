@@ -10,6 +10,43 @@ const WINDOWS = ["Summer Transfer (Pre-Season)", "Winter Transfer"];
 const SEASON_OPTIONS = SEASONS.map((s) => ({ value: s, label: s }));
 const WINDOW_OPTIONS = WINDOWS.map((w) => ({ value: w, label: w }));
 
+// Match a raw detected name/username against the list of known teams
+function matchTeamToClub(rawName, teams = []) {
+  if (!rawName || !teams || teams.length === 0) return "";
+  const clean = rawName.trim().toLowerCase();
+
+  // 1. Exact match with team.name
+  const exact = teams.find((t) => t.name.toLowerCase() === clean);
+  if (exact) return exact.name;
+
+  // 2. Match username inside parentheses e.g. "Santos (JohnnyRainbow)" -> "JohnnyRainbow"
+  const inParen = teams.find((t) => {
+    const m = t.name.match(/\(([^)]+)\)/);
+    return m && m[1].toLowerCase().trim() === clean;
+  });
+  if (inParen) return inParen.name;
+
+  // 3. Substring match
+  const sub = teams.find(
+    (t) =>
+      t.name.toLowerCase().includes(clean) ||
+      clean.includes(t.name.toLowerCase())
+  );
+  if (sub) return sub.name;
+
+  // 4. Word-level match
+  const cleanWords = clean.split(/[^a-z0-9]+/i).filter((w) => w.length >= 3);
+  if (cleanWords.length > 0) {
+    const wordMatch = teams.find((t) => {
+      const tLower = t.name.toLowerCase();
+      return cleanWords.some((w) => tLower.includes(w));
+    });
+    if (wordMatch) return wordMatch.name;
+  }
+
+  return "";
+}
+
 export default function ScreenshotScanModal({
   isOpen,
   onClose,
@@ -26,6 +63,8 @@ export default function ScreenshotScanModal({
   const [selectedTeam, setSelectedTeam] = useState(defaultTeam);
   const [selectedSeason, setSelectedSeason] = useState(defaultSeason);
   const [selectedWindow, setSelectedWindow] = useState(defaultWindow);
+  const [detectedUser, setDetectedUser] = useState(null); // username from screenshot
+  const [existingLogs, setExistingLogs] = useState([]);   // logs already in DB
 
   // Array of loaded images: [{ id, dataUrl, mimeType, name }]
   const [images, setImages] = useState([]);
@@ -51,6 +90,25 @@ export default function ScreenshotScanModal({
     if (defaultSeason) setSelectedSeason(defaultSeason);
     if (defaultWindow) setSelectedWindow(defaultWindow);
   }, [defaultTeam, defaultSeason, defaultWindow]);
+
+  // Fetch existing logs from DB whenever team/season/window changes
+  useEffect(() => {
+    if (!isOpen) return;
+    async function fetchLogs() {
+      try {
+        const supabase = createClient();
+        if (!supabase) return;
+        const { data } = await supabase
+          .from("transfer_logs")
+          .select("player, team, season, transfer_window")
+          .order("purchase_date", { ascending: false });
+        setExistingLogs(data || []);
+      } catch (_) {
+        // silently ignore — duplicate detection is best-effort
+      }
+    }
+    fetchLogs();
+  }, [isOpen, selectedTeam, selectedSeason, selectedWindow]);
 
   // Handle incoming initial files from paste on parent component (only once per modal open)
   useEffect(() => {
@@ -109,7 +167,25 @@ export default function ScreenshotScanModal({
     setSelectedIndices(new Set());
     setError("");
     setSuccessMsg("");
+    setDetectedUser(null);
     onClose();
+  }
+
+  // Check if a purchase already exists in the DB for current team/season/window
+  function isDuplicate(purchase) {
+    if (!existingLogs || existingLogs.length === 0) return false;
+    const normalise = (s) => (s || "").trim().toLowerCase();
+    const pName = normalise(purchase.player);
+    const team = normalise(selectedTeam);
+    const season = normalise(selectedSeason);
+    const window = normalise(selectedWindow);
+    return existingLogs.some(
+      (log) =>
+        normalise(log.player) === pName &&
+        normalise(log.team) === team &&
+        normalise(log.season) === season &&
+        normalise(log.transfer_window) === window
+    );
   }
 
   // Convert File object to base64
@@ -198,6 +274,16 @@ export default function ScreenshotScanModal({
       }
 
       const detected = data.purchases || [];
+      const user = data.detectedUser || null;
+
+      // Auto-match purchasing club from the detected username
+      if (user) {
+        setDetectedUser(user);
+        if (!selectedTeam) {
+          const matched = matchTeamToClub(user, teams);
+          if (matched) setSelectedTeam(matched);
+        }
+      }
 
       if (replaceMode) {
         if (detected.length === 0) {
@@ -412,6 +498,11 @@ export default function ScreenshotScanModal({
                 searchable
                 searchPlaceholder="Select team..."
               />
+              {detectedUser && (
+                <p className="mt-1 text-[10px] text-neutral-500">
+                  Detected: <span className="text-blue-400 font-mono">{detectedUser}</span>
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-neutral-400 mb-1 font-medium">Season</label>
@@ -663,11 +754,16 @@ export default function ScreenshotScanModal({
                     <div className="max-h-64 sm:max-h-72 overflow-y-auto divide-y divide-neutral-800/60 custom-scrollbar">
                       {purchases.map((item, idx) => {
                         const isSelected = selectedIndices.has(idx);
+                        const dup = isDuplicate(item);
                         return (
                           <div
                             key={idx}
                             className={`grid grid-cols-12 gap-2 px-3 py-2.5 items-center transition-colors ${
-                              isSelected ? "bg-neutral-900/40" : "opacity-50"
+                              dup
+                                ? "bg-amber-950/30 border-l-2 border-amber-500"
+                                : isSelected
+                                ? "bg-neutral-900/40"
+                                : "opacity-50"
                             }`}
                           >
                             <div className="col-span-1">
@@ -686,7 +782,7 @@ export default function ScreenshotScanModal({
                                 className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-neutral-200 focus:outline-none focus:border-blue-500"
                               />
                             </div>
-                            <div className="col-span-4">
+                            <div className="col-span-4 flex items-center gap-1.5">
                               <input
                                 type="text"
                                 value={item.player || ""}
@@ -694,6 +790,14 @@ export default function ScreenshotScanModal({
                                 onChange={(e) => updatePurchase(idx, "player", e.target.value)}
                                 className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1 text-xs text-white font-medium focus:outline-none focus:border-blue-500"
                               />
+                              {dup && (
+                                <span
+                                  title="Already logged for this team/season/window"
+                                  className="shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/40 whitespace-nowrap"
+                                >
+                                  DUP
+                                </span>
+                              )}
                             </div>
                             <div className="col-span-3">
                               <div className="relative">
