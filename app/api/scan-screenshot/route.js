@@ -48,12 +48,11 @@ async function scanSingleImage(cleanBase64, mimeType, apiKey) {
   const interaction = await client.interactions.create({
     model: MODEL,
     input: [
-      { text: PROMPT },
+      { type: "text", text: PROMPT },
       {
-        inlineData: {
-          mimeType,
-          data: cleanBase64,
-        },
+        type: "image",
+        data: cleanBase64,
+        mime_type: mimeType,
       },
     ],
   });
