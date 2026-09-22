@@ -89,6 +89,7 @@ export default function TradeScanModal({
 
   const fileInputRef = useRef(null);
   const processedInitialRef = useRef(false);
+  const abortControllerRef = useRef(null);
 
   useEffect(() => {
     if (defaultSeason) setTradeData((prev) => ({ ...prev, season: defaultSeason }));
@@ -231,6 +232,13 @@ export default function TradeScanModal({
   async function scanTradeScreenshot(imgObj) {
     if (!imgObj?.dataUrl) return;
 
+    // Cancel any previous in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setIsScanning(true);
     setError("");
     setDuplicateWarning(null);
@@ -243,6 +251,7 @@ export default function TradeScanModal({
           imageBase64: imgObj.dataUrl,
           mimeType: imgObj.mimeType,
         }),
+        signal: controller.signal,
       });
 
       const data = await res.json();
@@ -274,8 +283,11 @@ export default function TradeScanModal({
       const dupWarning = checkForDuplicates(updatedTrade, logs);
       setDuplicateWarning(dupWarning);
     } catch (err) {
+      // Ignore abort errors — user intentionally cancelled
+      if (err.name === "AbortError") return;
       setError(err.message || "Failed to analyze trade screenshot");
     } finally {
+      abortControllerRef.current = null;
       setIsScanning(false);
     }
   }
@@ -294,7 +306,13 @@ export default function TradeScanModal({
   }
 
   function handleClose() {
-    if (isScanning || isSubmitting) return;
+    if (isSubmitting) return;
+    // Abort any in-flight scan so the modal closes immediately
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsScanning(false);
     setImage(null);
     setDetectedRaw(null);
     setError("");
@@ -391,7 +409,7 @@ export default function TradeScanModal({
           <button
             type="button"
             onClick={handleClose}
-            disabled={isScanning || isSubmitting}
+            disabled={isSubmitting}
             className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -797,7 +815,7 @@ export default function TradeScanModal({
           <button
             type="button"
             onClick={handleClose}
-            disabled={isScanning || isSubmitting}
+            disabled={isSubmitting}
             className="px-4 py-2 rounded-xl text-xs font-medium text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
           >
             Cancel
